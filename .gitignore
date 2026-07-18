@@ -1,0 +1,13 @@
+# Dependencies
+node_modules/
+
+# Environment variables - NEVER commit this, it has your Supabase secret key
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
