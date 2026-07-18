@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Matches - Fantasy App</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="topbar">
+    <h1>Matches</h1>
+    <button id="logoutBtn">Log Out</button>
+  </div>
+  <div class="container" id="matchList">
+    <p>Loading matches...</p>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    requireLogin();
+
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      Auth.clearSession();
+      window.location.href = 'login.html';
+    });
+
+    function formatDate(dateStr) {
+      return formatIST(dateStr);
+    }
+
+    function statusLabel(status) {
+      return { upcoming: 'Selection Open', locked: 'Selection Closed', completed: 'Completed' }[status] || status;
+    }
+
+    async function loadMatches() {
+      const container = document.getElementById('matchList');
+      try {
+        const matches = await Api.getMatches();
+        if (matches.length === 0) {
+          container.innerHTML = '<p>No matches scheduled yet.</p>';
+          return;
+        }
+        container.innerHTML = matches.map(m => {
+          const target = m.status === 'completed'
+            ? `results.html?matchId=${m.id}`
+            : `team-select.html?matchId=${m.id}`;
+          return `
+          <div class="card match-card" data-target="${target}" data-match-id="${m.id}">
+            <div class="match-teams">
+              <span>${m.team_a?.short_code || '?'}</span>
+              <span style="color:#9ca3af; font-weight:400;">vs</span>
+              <span>${m.team_b?.short_code || '?'}</span>
+            </div>
+            <div class="match-meta">Match: ${formatDate(m.match_date)}</div>
+            <div class="match-meta">Selection closes: ${formatDate(m.selection_deadline)}</div>
+            <span class="status-badge status-${m.status}">${statusLabel(m.status)}</span>
+          </div>
+        `;
+        }).join('');
+
+        document.querySelectorAll('.match-card').forEach(card => {
+          card.addEventListener('click', () => {
+            const target = card.dataset.target;
+            console.log('Navigating to', target);
+            window.location.href = target;
+          });
+        });
+      } catch (err) {
+        container.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    }
+
+    loadMatches();
+  </script>
+</body>
+</html>

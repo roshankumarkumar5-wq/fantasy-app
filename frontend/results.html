@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Results - Fantasy App</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="topbar">
+    <h1>Match Results</h1>
+    <button onclick="window.location.href='matches.html'">Back</button>
+  </div>
+  <div class="container">
+    <div class="card" id="myTeamCard"><p>Loading your team...</p></div>
+    <div class="card">
+      <h3>Leaderboard</h3>
+      <div id="leaderboard"><p>Loading...</p></div>
+    </div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    requireLogin();
+    const params = new URLSearchParams(window.location.search);
+    const matchId = params.get('matchId');
+    if (!matchId) window.location.href = 'matches.html';
+
+    async function loadMyTeam() {
+      const el = document.getElementById('myTeamCard');
+      try {
+        const { team } = await Api.getMyTeam(matchId);
+        if (!team) {
+          el.innerHTML = '<p>You did not submit a team for this match.</p>';
+          return;
+        }
+        el.innerHTML = `
+          <h3>Your Team - ${team.total_points ?? 0} points</h3>
+          ${team.players.map(tp => `
+            <div class="player-row">
+              <div class="player-info">
+                <span class="player-name">${tp.player.name} ${tp.special_rank ? `<span class="special-chip">S${tp.special_rank}</span>` : ''}</span>
+                <span class="player-meta">${tp.player.role}</span>
+              </div>
+            </div>
+          `).join('')}
+        `;
+      } catch (err) {
+        el.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    }
+
+    async function loadLeaderboard() {
+      const el = document.getElementById('leaderboard');
+      try {
+        const rows = await Api.getPublicLeaderboard(matchId);
+        if (rows.length === 0) {
+          el.innerHTML = '<p class="match-meta">No teams submitted yet.</p>';
+          return;
+        }
+        el.innerHTML = `
+          <table class="admin-table">
+            <tr><th>#</th><th>Name</th><th>Points</th></tr>
+            ${rows.map(r => `
+              <tr style="${r.is_you ? 'background:#e0edff;font-weight:600;' : ''}">
+                <td>${r.rank}</td><td>${r.full_name}${r.is_you ? ' (You)' : ''}</td><td>${r.total_points}</td>
+              </tr>
+            `).join('')}
+          </table>
+        `;
+      } catch (err) {
+        el.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    }
+
+    loadMyTeam();
+    loadLeaderboard();
+  </script>
+</body>
+</html>

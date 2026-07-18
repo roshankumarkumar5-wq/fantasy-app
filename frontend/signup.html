@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign Up - Fantasy App</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="topbar"><h1>Fantasy League</h1></div>
+  <div class="container">
+    <div class="card">
+      <h2>Create Account</h2>
+      <label>Full Name</label>
+      <input type="text" id="fullName" placeholder="Your name">
+      <label>Email</label>
+      <input type="email" id="email" placeholder="you@example.com">
+      <label>Phone (optional)</label>
+      <input type="tel" id="phone" placeholder="+91 9999999999">
+      <label>Password</label>
+      <input type="password" id="password" placeholder="At least 6 characters">
+      <button class="btn" id="signupBtn">Sign Up</button>
+      <div class="error-msg" id="errorMsg"></div>
+    </div>
+    <div class="link">Already have an account? <a href="login.html">Log in</a></div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    document.getElementById('signupBtn').addEventListener('click', async () => {
+      const full_name = document.getElementById('fullName').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const phone = document.getElementById('phone').value.trim();
+      const password = document.getElementById('password').value;
+      const errorMsg = document.getElementById('errorMsg');
+      errorMsg.textContent = '';
+
+      if (!full_name || !email || !password) {
+        errorMsg.textContent = 'Name, email, and password are required';
+        return;
+      }
+      if (password.length < 6) {
+        errorMsg.textContent = 'Password must be at least 6 characters';
+        return;
+      }
+
+      try {
+        const result = await Api.signup({ full_name, email, phone, password });
+        window.location.href = `verify-email.html?email=${encodeURIComponent(result.email)}`;
+      } catch (err) {
+        errorMsg.textContent = err.message;
+      }
+    });
+  </script>
+</body>
+</html>

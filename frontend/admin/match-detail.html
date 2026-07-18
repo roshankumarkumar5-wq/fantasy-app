@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Match Detail - Admin</title>
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <div class="topbar">
+    <h1>Match Detail</h1>
+    <button onclick="window.location.href='dashboard.html'">Back</button>
+  </div>
+  <div class="container">
+    <div class="card" id="matchSummary"><p>Loading...</p></div>
+
+    <div class="card">
+      <h3>1. Lock Selections</h3>
+      <p class="match-meta">Selection closes automatically 1 hour before the match (no manual action needed for that). Use this button if you want to lock it early for any reason.</p>
+      <button class="btn" id="lockBtn">Lock Match</button>
+      <div id="lockMsg"></div>
+    </div>
+
+    <div class="card">
+      <h3>2. Enter Match Stats (from scoresheet)</h3>
+      <p class="match-meta">Add a row per player who played. Points are calculated automatically from the global scoring rules.</p>
+      <div id="statsRows"></div>
+      <button class="btn secondary" id="addStatsRowBtn">+ Add Player Row</button>
+      <button class="btn" id="saveStatsBtn">Save Stats</button>
+      <div id="statsMsg"></div>
+    </div>
+
+    <div class="card">
+      <h3>3. Finalize Match &amp; Compute Points</h3>
+      <p class="match-meta">Calculates every user's team total using saved stats and special player multipliers, then marks the match completed.</p>
+      <button class="btn" id="finalizeBtn">Finalize Match</button>
+      <div id="finalizeMsg"></div>
+    </div>
+
+    <div class="card">
+      <h3>Leaderboard</h3>
+      <button class="btn secondary" id="loadLeaderboardBtn">Refresh Leaderboard</button>
+      <div id="leaderboard"></div>
+    </div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script>
+    requireAdminLogin();
+
+    const params = new URLSearchParams(window.location.search);
+    const matchId = params.get('matchId');
+    if (!matchId) window.location.href = 'dashboard.html';
+
+    async function loadMatchSummary() {
+      const el = document.getElementById('matchSummary');
+      try {
+        const data = await Api.getMatch(matchId);
+        const m = data.match;
+        el.innerHTML = `
+          <h3>${m.team_a?.short_code || '?'} vs ${m.team_b?.short_code || '?'}</h3>
+          <p class="match-meta">Match: ${formatIST(m.match_date)}</p>
+          <p class="match-meta">Selection closes: ${formatIST(m.selection_deadline)}</p>
+          <p class="match-meta">Squad size: ${m.squad_size} (4-7 players per team)</p>
+          <p class="match-meta">Special players: ${data.special_rules.enabled ? 'Enabled (' + data.special_rules.multipliers.join('x, ') + 'x)' : 'Disabled'}</p>
+          <span class="status-badge status-${m.status}">${m.status}</span>
+          <p class="match-meta" style="margin-top:8px;">${data.players.length} player(s) available (auto-derived from both teams' rosters)</p>
+        `;
+      } catch (err) {
+        el.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    }
+    loadMatchSummary();
+
+    document.getElementById('lockBtn').addEventListener('click', async () => {
+      const msg = document.getElementById('lockMsg');
+      try {
+        await Api.lockMatch(matchId);
+        msg.innerHTML = '<p class="success-msg">Match locked. No further team submissions allowed.</p>';
+        loadMatchSummary();
+      } catch (err) {
+        msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    });
+
+    // ---- Stats entry rows ----
+    let statsRowCount = 0;
+    function addStatsRow() {
+      statsRowCount++;
+      const row = document.createElement('div');
+      row.className = 'card';
+      row.style.marginBottom = '8px';
+      row.innerHTML = `
+        <label>Player ID</label>
+        <input type="text" class="stat-player-id" placeholder="player UUID">
+        <label>Runs</label>
+        <input type="number" class="stat-runs" value="0">
+        <label>Wickets</label>
+        <input type="number" class="stat-wickets" value="0">
+        <label>Catches</label>
+        <input type="number" class="stat-catches" value="0">
+        <label>Stumpings</label>
+        <input type="number" class="stat-stumpings" value="0">
+        <label>Run Outs</label>
+        <input type="number" class="stat-runouts" value="0">
+      `;
+      document.getElementById('statsRows').appendChild(row);
+    }
+    document.getElementById('addStatsRowBtn').addEventListener('click', addStatsRow);
+    addStatsRow(); // start with one row
+
+    document.getElementById('saveStatsBtn').addEventListener('click', async () => {
+      const msg = document.getElementById('statsMsg');
+      const rows = document.querySelectorAll('#statsRows > div');
+      const stats = Array.from(rows).map(row => ({
+        player_id: row.querySelector('.stat-player-id').value.trim(),
+        runs: parseInt(row.querySelector('.stat-runs').value) || 0,
+        wickets: parseInt(row.querySelector('.stat-wickets').value) || 0,
+        catches: parseInt(row.querySelector('.stat-catches').value) || 0,
+        stumpings: parseInt(row.querySelector('.stat-stumpings').value) || 0,
+        run_outs: parseInt(row.querySelector('.stat-runouts').value) || 0
+      })).filter(s => s.player_id);
+
+      if (stats.length === 0) {
+        msg.innerHTML = '<p class="error-msg">Add at least one player row with a Player ID</p>';
+        return;
+      }
+
+      try {
+        await Api.submitStats(matchId, { stats });
+        msg.innerHTML = `<p class="success-msg">Saved stats for ${stats.length} player(s)</p>`;
+      } catch (err) {
+        msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    });
+
+    document.getElementById('finalizeBtn').addEventListener('click', async () => {
+      const msg = document.getElementById('finalizeMsg');
+      if (!confirm('This will compute final points for all users and mark the match completed. Continue?')) return;
+      try {
+        const result = await Api.finalizeMatch(matchId);
+        msg.innerHTML = `<p class="success-msg">Finalized. ${result.teams_updated} user team(s) updated.</p>`;
+        loadMatchSummary();
+      } catch (err) {
+        msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    });
+
+    document.getElementById('loadLeaderboardBtn').addEventListener('click', async () => {
+      const el = document.getElementById('leaderboard');
+      try {
+        const rows = await Api.getLeaderboard(matchId);
+        if (rows.length === 0) {
+          el.innerHTML = '<p class="match-meta">No teams submitted yet.</p>';
+          return;
+        }
+        el.innerHTML = `
+          <table class="admin-table">
+            <tr><th>#</th><th>User</th><th>Points</th></tr>
+            ${rows.map((r, i) => `<tr><td>${i + 1}</td><td>${r.user?.full_name || 'Unknown'}</td><td>${r.total_points}</td></tr>`).join('')}
+          </table>
+        `;
+      } catch (err) {
+        el.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    });
+  </script>
+</body>
+</html>

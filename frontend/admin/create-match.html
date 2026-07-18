@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Schedule Match - Admin</title>
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <div class="topbar">
+    <h1>Schedule Match</h1>
+    <button onclick="window.location.href='dashboard.html'">Back</button>
+  </div>
+  <div class="container">
+    <div class="card">
+      <label>Team A</label>
+      <select id="teamAId"><option value="">Loading teams...</option></select>
+      <label>Team B</label>
+      <select id="teamBId"><option value="">Loading teams...</option></select>
+      <p class="match-meta">Don't see your teams? Add them first on the <a href="teams-players.html">Teams &amp; Players</a> page. All players belonging to these two teams will automatically be available for users to pick from - no separate step needed.</p>
+
+      <label>Match Date &amp; Time (IST)</label>
+      <input type="datetime-local" id="matchDate">
+      <p class="match-meta">Enter this in Indian Standard Time. Selection will automatically close 1 hour before this time - no need to set that separately.</p>
+
+      <label>Special Player System</label>
+      <select id="specialEnabled">
+        <option value="true">Enabled</option>
+        <option value="false">Disabled</option>
+      </select>
+
+      <label>Multipliers (comma-separated, e.g. "2,1.5" for Captain + Vice-Captain, or just "2" for Captain only)</label>
+      <input type="text" id="multipliers" value="2,1.5">
+
+      <p class="match-meta">Squad size is fixed at 11: between 4 and 7 players from each team.</p>
+
+      <button class="btn" id="createBtn">Create Match</button>
+      <div id="msg"></div>
+    </div>
+
+    <div class="card" id="nextStepsCard" style="display:none;">
+      <h3>Match Created ✓</h3>
+      <p>Users can now pick their fantasy team for this match right away. Head to Match Detail when you need to lock selections, enter stats, or finalize results after the match.</p>
+      <button class="btn" id="goToMatchBtn">Go to Match Detail</button>
+    </div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script>
+    requireAdminLogin();
+
+    let createdMatchId = null;
+
+    async function loadTeams() {
+      const teamAEl = document.getElementById('teamAId');
+      const teamBEl = document.getElementById('teamBId');
+      try {
+        const teams = await Api.listRealTeams();
+        if (teams.length === 0) {
+          const msg = '<option value="">No teams yet - add some first</option>';
+          teamAEl.innerHTML = msg;
+          teamBEl.innerHTML = msg;
+          return;
+        }
+        const options = '<option value="">Select a team</option>' +
+          teams.map(t => `<option value="${t.id}">${t.name} (${t.short_code})</option>`).join('');
+        teamAEl.innerHTML = options;
+        teamBEl.innerHTML = options;
+      } catch (err) {
+        document.getElementById('msg').innerHTML = `<p class="error-msg">Could not load teams: ${err.message}</p>`;
+      }
+    }
+    loadTeams();
+
+    document.getElementById('createBtn').addEventListener('click', async () => {
+      const msg = document.getElementById('msg');
+      msg.innerHTML = '';
+
+      const teamAId = document.getElementById('teamAId').value;
+      const teamBId = document.getElementById('teamBId').value;
+      const matchDateRaw = document.getElementById('matchDate').value;
+
+      if (!teamAId || !teamBId) {
+        msg.innerHTML = '<p class="error-msg">Select both teams</p>';
+        return;
+      }
+      if (teamAId === teamBId) {
+        msg.innerHTML = '<p class="error-msg">Team A and Team B must be different</p>';
+        return;
+      }
+      if (!matchDateRaw) {
+        msg.innerHTML = '<p class="error-msg">Enter the match date and time</p>';
+        return;
+      }
+
+      try {
+        // Convert the entered wall-clock time (intended as IST) into the
+        // correct absolute UTC instant, regardless of this browser's own timezone.
+        const matchDateUtc = istInputToUtcIso(matchDateRaw);
+
+        const match = await Api.createMatch({
+          team_a_id: teamAId,
+          team_b_id: teamBId,
+          match_date: matchDateUtc
+        });
+
+        const enabled = document.getElementById('specialEnabled').value === 'true';
+        const multipliers = document.getElementById('multipliers').value
+          .split(',')
+          .map(s => parseFloat(s.trim()))
+          .filter(n => !isNaN(n));
+
+        await Api.setSpecialRules(match.id, { enabled, multipliers });
+
+        createdMatchId = match.id;
+        document.getElementById('nextStepsCard').style.display = 'block';
+        msg.innerHTML = `<p class="success-msg">Match created for ${formatIST(matchDateUtc)}. Selection closes ${formatIST(new Date(new Date(matchDateUtc).getTime() - 60*60*1000).toISOString())}.</p>`;
+      } catch (err) {
+        msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    });
+
+    document.getElementById('goToMatchBtn').addEventListener('click', () => {
+      window.location.href = `match-detail.html?matchId=${createdMatchId}`;
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Dashboard</title>
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <div class="topbar">
+    <h1>Admin Panel</h1>
+    <button id="logoutBtn">Log Out</button>
+  </div>
+  <div class="container">
+    <div class="tab-nav">
+      <a href="dashboard.html" class="active">Matches</a>
+      <a href="teams-players.html">Teams &amp; Players</a>
+    </div>
+
+    <div class="card">
+      <h3>Create New Match</h3>
+      <a href="create-match.html"><button class="btn">+ Schedule a Match</button></a>
+    </div>
+
+    <div id="matchList"><p>Loading matches...</p></div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script>
+    requireAdminLogin();
+
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      Auth.clearSession();
+      window.location.href = '../login.html';
+    });
+
+    async function loadMatches() {
+      const container = document.getElementById('matchList');
+      try {
+        const matches = await Api.getMatches();
+        if (matches.length === 0) {
+          container.innerHTML = '<p>No matches yet.</p>';
+          return;
+        }
+        container.innerHTML = matches.map(m => `
+          <div class="card match-card" data-match-id="${m.id}">
+            <div class="match-teams">
+              <span>${m.team_a?.short_code || '?'}</span>
+              <span style="color:#9ca3af; font-weight:400;">vs</span>
+              <span>${m.team_b?.short_code || '?'}</span>
+            </div>
+            <div class="match-meta">${formatIST(m.match_date)}</div>
+            <span class="status-badge status-${m.status}">${m.status}</span>
+          </div>
+        `).join('');
+
+        document.querySelectorAll('.match-card').forEach(card => {
+          card.addEventListener('click', () => {
+            window.location.href = `match-detail.html?matchId=${card.dataset.matchId}`;
+          });
+        });
+      } catch (err) {
+        container.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    }
+    loadMatches();
+  </script>
+</body>
+</html>

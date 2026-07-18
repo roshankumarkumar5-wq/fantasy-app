@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teams & Players - Admin</title>
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <div class="topbar">
+    <h1>Admin Panel</h1>
+    <button id="logoutBtn">Log Out</button>
+  </div>
+  <div class="container">
+    <div class="tab-nav">
+      <a href="dashboard.html">Matches</a>
+      <a href="teams-players.html" class="active">Teams &amp; Players</a>
+    </div>
+
+    <div class="card">
+      <h3>Add a Real Team</h3>
+      <label>Team Name</label>
+      <input type="text" id="teamName" placeholder="e.g. Mumbai Indians">
+      <label>Short Code</label>
+      <input type="text" id="teamCode" placeholder="e.g. MI">
+      <label>Logo URL (optional)</label>
+      <input type="text" id="teamLogo" placeholder="https://...">
+      <button class="btn" id="addTeamBtn">Add Team</button>
+      <div id="teamMsg"></div>
+    </div>
+
+    <div class="card">
+      <h3>Bulk Upload Players (CSV)</h3>
+      <p class="match-meta">CSV columns required: <code>name, real_team_id, role, photo_url</code> (photo_url optional). Role must be one of: batsman, bowler, all-rounder, keeper.</p>
+      <input type="file" id="csvFile" accept=".csv">
+      <button class="btn" id="uploadCsvBtn">Upload CSV</button>
+      <div id="csvMsg"></div>
+    </div>
+
+    <div class="card">
+      <h3>Add a Single Player</h3>
+      <label>Name</label>
+      <input type="text" id="playerName" placeholder="Player name">
+      <label>Real Team ID</label>
+      <input type="text" id="playerTeamId" placeholder="paste team UUID">
+      <label>Role</label>
+      <select id="playerRole">
+        <option value="batsman">Batsman</option>
+        <option value="bowler">Bowler</option>
+        <option value="all-rounder">All-Rounder</option>
+        <option value="keeper">Wicket-Keeper</option>
+      </select>
+      <button class="btn" id="addPlayerBtn">Add Player</button>
+      <div id="playerMsg"></div>
+    </div>
+
+    <div class="card">
+      <h3>Existing Teams</h3>
+      <div id="teamsListMsg"></div>
+      <table class="admin-table" id="teamsTable">
+        <tr><th>Name</th><th>Code</th><th></th></tr>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>Existing Players</h3>
+      <div id="playersListMsg"></div>
+      <table class="admin-table" id="playersTable">
+        <tr><th>Name</th><th>Team</th><th>Role</th><th></th></tr>
+      </table>
+    </div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script>
+    requireAdminLogin();
+
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      Auth.clearSession();
+      window.location.href = '../login.html';
+    });
+
+    async function loadTeamsList() {
+      const table = document.getElementById('teamsTable');
+      const msgEl = document.getElementById('teamsListMsg');
+      try {
+        const teams = await Api.listRealTeams();
+        table.innerHTML = '<tr><th>Name</th><th>Code</th><th></th></tr>' +
+          teams.map(t => `
+            <tr>
+              <td>${t.name}</td>
+              <td>${t.short_code}</td>
+              <td><button class="delete-team-btn" data-id="${t.id}" data-name="${t.name}" style="color:#dc2626;background:none;border:1px solid #dc2626;border-radius:6px;padding:4px 10px;cursor:pointer;">Delete</button></td>
+            </tr>
+          `).join('');
+
+        document.querySelectorAll('.delete-team-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (!confirm(`Delete team "${btn.dataset.name}"? This also deletes its players.`)) return;
+            try {
+              await Api.deleteRealTeam(btn.dataset.id);
+              msgEl.innerHTML = '<p class="success-msg">Team deleted.</p>';
+              loadTeamsList();
+              loadPlayersList();
+            } catch (err) {
+              msgEl.innerHTML = `<p class="error-msg">${err.message}</p>`;
+            }
+          });
+        });
+      } catch (err) {
+        msgEl.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    }
+
+    async function loadPlayersList() {
+      const table = document.getElementById('playersTable');
+      const msgEl = document.getElementById('playersListMsg');
+      try {
+        const players = await Api.listPlayers();
+        table.innerHTML = '<tr><th>Name</th><th>Team</th><th>Role</th><th></th></tr>' +
+          players.map(p => `
+            <tr>
+              <td>${p.name}</td>
+              <td>${p.real_team?.short_code || '-'}</td>
+              <td>${p.role}</td>
+              <td><button class="delete-player-btn" data-id="${p.id}" data-name="${p.name}" style="color:#dc2626;background:none;border:1px solid #dc2626;border-radius:6px;padding:4px 10px;cursor:pointer;">Delete</button></td>
+            </tr>
+          `).join('');
+
+        document.querySelectorAll('.delete-player-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (!confirm(`Delete player "${btn.dataset.name}"?`)) return;
+            try {
+              await Api.deletePlayer(btn.dataset.id);
+              msgEl.innerHTML = '<p class="success-msg">Player deleted.</p>';
+              loadPlayersList();
+            } catch (err) {
+              msgEl.innerHTML = `<p class="error-msg">${err.message}</p>`;
+            }
+          });
+        });
+      } catch (err) {
+        msgEl.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    }
+
+    loadTeamsList();
+    loadPlayersList();
+
+    document.getElementById('addTeamBtn').addEventListener('click', async () => {
+      const msg = document.getElementById('teamMsg');
+      try {
+        const team = await Api.createRealTeam({
+          name: document.getElementById('teamName').value.trim(),
+          short_code: document.getElementById('teamCode').value.trim(),
+          logo_url: document.getElementById('teamLogo').value.trim() || null
+        });
+        msg.innerHTML = `<p class="success-msg">Created team "${team.name}" — ID: ${team.id}</p>`;
+        loadTeamsList();
+      } catch (err) {
+        msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    });
+
+    document.getElementById('uploadCsvBtn').addEventListener('click', async () => {
+      const msg = document.getElementById('csvMsg');
+      const fileInput = document.getElementById('csvFile');
+      if (!fileInput.files.length) {
+        msg.innerHTML = '<p class="error-msg">Choose a CSV file first</p>';
+        return;
+      }
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+      try {
+        const result = await Api.uploadPlayersCsv(formData);
+        msg.innerHTML = `<p class="success-msg">Uploaded ${result.inserted} players</p>`;
+        loadPlayersList();
+      } catch (err) {
+        msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    });
+
+    document.getElementById('addPlayerBtn').addEventListener('click', async () => {
+      const msg = document.getElementById('playerMsg');
+      try {
+        const player = await Api.createPlayer({
+          name: document.getElementById('playerName').value.trim(),
+          real_team_id: document.getElementById('playerTeamId').value.trim(),
+          role: document.getElementById('playerRole').value
+        });
+        msg.innerHTML = `<p class="success-msg">Added player "${player.name}" — ID: ${player.id}</p>`;
+        loadPlayersList();
+      } catch (err) {
+        msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    });
+  </script>
+</body>
+</html>

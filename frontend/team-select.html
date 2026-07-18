@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Select Team - Fantasy App</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="topbar">
+    <h1 id="matchTitle">Select Team</h1>
+    <button onclick="window.location.href='matches.html'">Back</button>
+  </div>
+  <div class="credit-bar" id="countsBar" style="display:none;"></div>
+  <div class="role-tabs" id="teamTabs"></div>
+  <div class="container" id="playerList">
+    <p>Loading...</p>
+  </div>
+
+  <!-- Step 2: special player selection, hidden until squad is full -->
+  <div class="container" id="specialStep" style="display:none;">
+    <div class="card">
+      <h3 id="specialTitle">Choose your special player(s)</h3>
+      <p class="match-meta" id="specialHint"></p>
+      <div id="specialList"></div>
+    </div>
+  </div>
+
+  <div class="bottom-bar">
+    <span id="bottomStatus" style="font-size:13px; color:#6b7280;"></span>
+    <button class="btn" id="actionBtn" style="width:auto; padding:12px 24px;" disabled>Continue</button>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    requireLogin();
+
+    const params = new URLSearchParams(window.location.search);
+    const matchId = params.get('matchId');
+    if (!matchId) window.location.href = 'matches.html';
+
+    const MIN_PER_TEAM = 4;
+    const MAX_PER_TEAM = 7;
+
+    let matchData = null;      // { match, special_rules, players }
+    let selectedIds = new Set();
+    let specialAssignments = new Map(); // player_id -> rank
+    let currentTeamFilter = 'all'; // 'all' | team_a.id | team_b.id
+    let step = 1; // 1 = pick squad, 2 = pick special players
+
+    const ROLE_LABELS = {
+      batsman: 'Batsman', bowler: 'Bowler', 'all-rounder': 'All-Rounder', keeper: 'Wicket-Keeper'
+    };
+
+    function countForTeam(teamId) {
+      let count = 0;
+      for (const id of selectedIds) {
+        const p = matchData.players.find(pl => pl.id === id);
+        if (p && p.real_team_id === teamId) count++;
+      }
+      return count;
+    }
+
+    function renderCountsBar() {
+      const { match } = matchData;
+      const countA = countForTeam(match.team_a.id);
+      const countB = countForTeam(match.team_b.id);
+      const bar = document.getElementById('countsBar');
+      bar.style.display = 'flex';
+      bar.innerHTML = `
+        <span>${match.team_a.short_code}: ${countA}/${MAX_PER_TEAM} (min ${MIN_PER_TEAM})</span>
+        <span>${match.team_b.short_code}: ${countB}/${MAX_PER_TEAM} (min ${MIN_PER_TEAM})</span>
+        <span>${selectedIds.size}/${match.squad_size} total</span>
+      `;
+    }
+
+    function renderTeamTabs() {
+      const { match } = matchData;
+      const tabs = [
+        { id: 'all', label: 'All' },
+        { id: match.team_a.id, label: match.team_a.short_code },
+        { id: match.team_b.id, label: match.team_b.short_code }
+      ];
+      document.getElementById('teamTabs').innerHTML = tabs.map(t => `
+        <div class="role-tab ${t.id === currentTeamFilter ? 'active' : ''}" data-team="${t.id}">${t.label}</div>
+      `).join('');
+      document.querySelectorAll('.role-tab').forEach(el => {
+        el.addEventListener('click', () => {
+          currentTeamFilter = el.dataset.team;
+          renderPlayerList();
+          renderTeamTabs();
+        });
+      });
+    }
+
+    function renderPlayerList() {
+      const { match, players } = matchData;
+      const filtered = currentTeamFilter === 'all'
+        ? players
+        : players.filter(p => p.real_team_id === currentTeamFilter);
+
+      document.getElementById('playerList').innerHTML = filtered.map(p => {
+        const isSelected = selectedIds.has(p.id);
+        const teamCount = countForTeam(p.real_team_id);
+        const teamFull = !isSelected && teamCount >= MAX_PER_TEAM;
+        const squadFull = !isSelected && selectedIds.size >= match.squad_size;
+        const disabled = (teamFull || squadFull) && !isSelected;
+        const teamLabel = p.real_team_id === match.team_a.id ? match.team_a.short_code : match.team_b.short_code;
+
+        return `
+          <div class="player-row ${isSelected ? 'selected' : ''}">
+            <div class="player-info">
+              <span class="player-name">${p.name}</span>
+              <span class="player-meta">${ROLE_LABELS[p.role] || p.role} · ${teamLabel}</span>
+            </div>
+            <div class="player-actions">
+              <button class="select-btn ${isSelected ? 'added' : ''}" data-id="${p.id}" ${disabled ? 'disabled' : ''}>
+                ${isSelected ? '✓' : '+'}
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      document.querySelectorAll('.select-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.id;
+          if (selectedIds.has(id)) {
+            selectedIds.delete(id);
+          } else {
+            selectedIds.add(id);
+          }
+          renderCountsBar();
+          renderPlayerList();
+          renderTeamTabs();
+          updateBottomBar();
+        });
+      });
+    }
+
+    function squadValid() {
+      const { match } = matchData;
+      const countA = countForTeam(match.team_a.id);
+      const countB = countForTeam(match.team_b.id);
+      return selectedIds.size === match.squad_size &&
+        countA >= MIN_PER_TEAM && countA <= MAX_PER_TEAM &&
+        countB >= MIN_PER_TEAM && countB <= MAX_PER_TEAM;
+    }
+
+    function updateBottomBar() {
+      const { match, special_rules } = matchData;
+      const status = document.getElementById('bottomStatus');
+      const btn = document.getElementById('actionBtn');
+
+      if (step === 1) {
+        const countA = countForTeam(match.team_a.id);
+        const countB = countForTeam(match.team_b.id);
+        if (selectedIds.size < match.squad_size) {
+          status.textContent = `Select ${match.squad_size - selectedIds.size} more player(s)`;
+        } else if (countA < MIN_PER_TEAM) {
+          status.textContent = `Need at least ${MIN_PER_TEAM} from ${match.team_a.short_code}`;
+        } else if (countB < MIN_PER_TEAM) {
+          status.textContent = `Need at least ${MIN_PER_TEAM} from ${match.team_b.short_code}`;
+        } else {
+          status.textContent = 'Squad complete';
+        }
+        const valid = squadValid();
+        btn.disabled = !valid;
+        btn.textContent = special_rules.enabled ? 'Continue' : 'Review & Submit';
+      } else {
+        const needed = special_rules.multipliers.length;
+        const picked = specialAssignments.size;
+        status.textContent = `${picked} of ${needed} special player(s) chosen`;
+        btn.disabled = picked === 0;
+        btn.textContent = 'Submit Team';
+      }
+    }
+
+    function renderSpecialStep() {
+      const { special_rules } = matchData;
+      document.getElementById('playerList').style.display = 'none';
+      document.getElementById('teamTabs').style.display = 'none';
+      document.getElementById('countsBar').style.display = 'none';
+      document.getElementById('specialStep').style.display = 'block';
+
+      document.getElementById('specialHint').textContent =
+        `You can assign up to ${special_rules.multipliers.length} special player(s) from your selected squad. Tap to assign the next available multiplier slot, tap again to remove.`;
+
+      const squadPlayers = matchData.players.filter(p => selectedIds.has(p.id));
+
+      document.getElementById('specialList').innerHTML = squadPlayers.map(p => {
+        const rank = specialAssignments.get(p.id);
+        return `
+          <div class="player-row ${rank ? 'selected' : ''}">
+            <div class="player-info">
+              <span class="player-name">${p.name} ${rank ? `<span class="special-chip">${special_rules.multipliers[rank-1]}x</span>` : ''}</span>
+              <span class="player-meta">${ROLE_LABELS[p.role] || p.role}</span>
+            </div>
+            <button class="select-btn ${rank ? 'added' : ''}" data-id="${p.id}">
+              ${rank ? rank : '+'}
+            </button>
+          </div>
+        `;
+      }).join('');
+
+      document.querySelectorAll('#specialList .select-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.id;
+          if (specialAssignments.has(id)) {
+            specialAssignments.delete(id);
+          } else {
+            const maxSlots = special_rules.multipliers.length;
+            const usedRanks = new Set(specialAssignments.values());
+            let nextRank = null;
+            for (let r = 1; r <= maxSlots; r++) {
+              if (!usedRanks.has(r)) { nextRank = r; break; }
+            }
+            if (nextRank) specialAssignments.set(id, nextRank);
+          }
+          renderSpecialStep();
+          updateBottomBar();
+        });
+      });
+    }
+
+    async function submitTeam() {
+      const btn = document.getElementById('actionBtn');
+      btn.disabled = true;
+      btn.textContent = 'Submitting...';
+      try {
+        const special_picks = Array.from(specialAssignments.entries()).map(([player_id, special_rank]) => ({ player_id, special_rank }));
+        await Api.submitTeam({
+          match_id: matchId,
+          player_ids: Array.from(selectedIds),
+          special_picks
+        });
+        alert('Team submitted successfully!');
+        window.location.href = 'matches.html';
+      } catch (err) {
+        alert('Error: ' + err.message);
+        btn.disabled = false;
+        btn.textContent = 'Submit Team';
+      }
+    }
+
+    document.getElementById('actionBtn').addEventListener('click', () => {
+      if (step === 1) {
+        if (matchData.special_rules.enabled) {
+          step = 2;
+          renderSpecialStep();
+          updateBottomBar();
+        } else {
+          submitTeam();
+        }
+      } else {
+        submitTeam();
+      }
+    });
+
+    async function init() {
+      try {
+        matchData = await Api.getMatch(matchId);
+        document.getElementById('matchTitle').textContent =
+          `${matchData.match.team_a?.short_code || '?'} vs ${matchData.match.team_b?.short_code || '?'}`;
+
+        if (matchData.match.status !== 'upcoming') {
+          document.getElementById('playerList').innerHTML =
+            '<div class="card">Selection is closed for this match.</div>';
+          document.getElementById('actionBtn').disabled = true;
+          return;
+        }
+
+        if (!matchData.players || matchData.players.length === 0) {
+          document.getElementById('playerList').innerHTML =
+            '<div class="card">No players found for either team yet. Ask the admin to add players to these teams.</div>';
+          document.getElementById('actionBtn').disabled = true;
+          return;
+        }
+
+        // Pre-fill if user already submitted a team
+        const existing = await Api.getMyTeam(matchId);
+        if (existing.team) {
+          existing.team.players.forEach(tp => {
+            selectedIds.add(tp.player.id);
+            if (tp.special_rank) specialAssignments.set(tp.player.id, tp.special_rank);
+          });
+        }
+
+        renderTeamTabs();
+        renderCountsBar();
+        renderPlayerList();
+        updateBottomBar();
+      } catch (err) {
+        document.getElementById('playerList').innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>

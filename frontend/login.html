@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login - Fantasy App</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1e5fd9">
+</head>
+<body>
+  <div class="topbar"><h1>Fantasy League</h1></div>
+  <div class="container">
+    <div class="card">
+      <h2>Log In</h2>
+      <label>Email</label>
+      <input type="email" id="email" placeholder="you@example.com">
+      <label>Password</label>
+      <input type="password" id="password" placeholder="••••••••">
+      <button class="btn" id="loginBtn">Log In</button>
+      <div class="error-msg" id="errorMsg"></div>
+      <div class="link"><a href="forgot-password.html">Forgot password?</a></div>
+    </div>
+    <div class="link">Don't have an account? <a href="signup.html">Sign up</a></div>
+  </div>
+
+  <script src="js/api.js"></script>
+  <script>
+    document.getElementById('loginBtn').addEventListener('click', async () => {
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value;
+      const errorMsg = document.getElementById('errorMsg');
+      errorMsg.textContent = '';
+
+      if (!email || !password) {
+        errorMsg.textContent = 'Please enter email and password';
+        return;
+      }
+
+      try {
+        const { token, user } = await Api.login({ email, password });
+        Auth.setSession(token, user);
+        window.location.href = user.role === 'admin' ? 'admin/dashboard.html' : 'matches.html';
+      } catch (err) {
+        if (err.message.includes('verify your email')) {
+          window.location.href = `verify-email.html?email=${encodeURIComponent(email)}`;
+          return;
+        }
+        errorMsg.textContent = err.message;
+      }
+    });
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }
+  </script>
+</body>
+</html>
