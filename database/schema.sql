@@ -57,6 +57,7 @@ create table matches (
   selection_deadline timestamptz not null,  -- auto-calculated as 1hr before match_date
   squad_size int not null default 11,
   status text not null default 'upcoming' check (status in ('upcoming', 'locked', 'completed')),
+  scoresheet_url text,   -- final PDF scoresheet uploaded by admin, for reference
   created_at timestamptz default now()
 );
 

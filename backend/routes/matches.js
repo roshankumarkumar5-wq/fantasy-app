@@ -27,7 +27,7 @@ router.get('/:id', requireAuth, async (req, res) => {
   const { data: match, error: matchErr } = await supabase
     .from('matches')
     .select(`
-      id, match_date, selection_deadline, squad_size, status,
+      id, match_date, selection_deadline, squad_size, status, scoresheet_url,
       team_a:team_a_id ( id, name, short_code, logo_url ),
       team_b:team_b_id ( id, name, short_code, logo_url )
     `)

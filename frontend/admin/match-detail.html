@@ -22,8 +22,17 @@
     </div>
 
     <div class="card">
-      <h3>2. Enter Match Stats (from scoresheet)</h3>
-      <p class="match-meta">Add a row per player who played. Points are calculated automatically from the global scoring rules.</p>
+      <h3>2. Upload Final Scoresheet (PDF)</h3>
+      <p class="match-meta">Upload the official match scoresheet as a PDF for your records. This is stored as a reference link only — you'll still enter each player's stats below using the dropdown (their names are the "key", so there's no need to look up IDs).</p>
+      <div id="currentScoresheet"></div>
+      <input type="file" id="scoresheetFile" accept="application/pdf">
+      <button class="btn secondary" id="uploadScoresheetBtn">Upload Scoresheet</button>
+      <div id="scoresheetMsg"></div>
+    </div>
+
+    <div class="card">
+      <h3>3. Enter Match Stats</h3>
+      <p class="match-meta">Add a row per player who played, selecting them by name. Points are calculated automatically from the global scoring rules.</p>
       <div id="statsRows"></div>
       <button class="btn secondary" id="addStatsRowBtn">+ Add Player Row</button>
       <button class="btn" id="saveStatsBtn">Save Stats</button>
@@ -31,8 +40,8 @@
     </div>
 
     <div class="card">
-      <h3>3. Finalize Match &amp; Compute Points</h3>
-      <p class="match-meta">Calculates every user's team total using saved stats and special player multipliers, then marks the match completed.</p>
+      <h3>4. Finalize Match &amp; Compute Points</h3>
+      <p class="match-meta">Calculates every user's team total using saved stats and special player multipliers, then marks the match completed. This is blocked if any picked player is still missing stats.</p>
       <button class="btn" id="finalizeBtn">Finalize Match</button>
       <div id="finalizeMsg"></div>
     </div>
@@ -40,7 +49,15 @@
     <div class="card">
       <h3>Leaderboard</h3>
       <button class="btn secondary" id="loadLeaderboardBtn">Refresh Leaderboard</button>
+      <button class="btn secondary" id="downloadLeaderboardBtn" style="display:none;">Download CSV</button>
       <div id="leaderboard"></div>
+    </div>
+
+    <div class="card" id="deleteCard" style="display:none;">
+      <h3 style="color:#dc2626;">Danger Zone</h3>
+      <p class="match-meta">Permanently deletes this match and all associated user teams, stats, and leaderboard data. Only available for completed matches.</p>
+      <button class="btn" id="deleteMatchBtn" style="background:#dc2626;">Delete This Match</button>
+      <div id="deleteMsg"></div>
     </div>
   </div>
 
@@ -53,11 +70,18 @@
     const matchId = params.get('matchId');
     if (!matchId) window.location.href = 'dashboard.html';
 
+    let matchPlayers = []; // [{id, name, role, real_team_id}]
+    let lastLeaderboard = [];
+    let currentMatchLabel = '';
+
     async function loadMatchSummary() {
       const el = document.getElementById('matchSummary');
       try {
         const data = await Api.getMatch(matchId);
         const m = data.match;
+        matchPlayers = data.players || [];
+        currentMatchLabel = `${m.team_a?.short_code || '?'}-vs-${m.team_b?.short_code || '?'}`;
+
         el.innerHTML = `
           <h3>${m.team_a?.short_code || '?'} vs ${m.team_b?.short_code || '?'}</h3>
           <p class="match-meta">Match: ${formatIST(m.match_date)}</p>
@@ -67,6 +91,19 @@
           <span class="status-badge status-${m.status}">${m.status}</span>
           <p class="match-meta" style="margin-top:8px;">${data.players.length} player(s) available (auto-derived from both teams' rosters)</p>
         `;
+
+        // Populate stats-row player dropdowns now that we have the roster
+        document.querySelectorAll('.stat-player-select').forEach(populatePlayerSelect);
+
+        // Show current scoresheet link if one exists
+        const scoresheetEl = document.getElementById('currentScoresheet');
+        scoresheetEl.innerHTML = m.scoresheet_url
+          ? `<p class="success-msg">Current scoresheet: <a href="${m.scoresheet_url}" target="_blank" rel="noopener">View PDF</a></p>`
+          : `<p class="match-meta">No scoresheet uploaded yet.</p>`;
+
+        // Show delete button only for completed matches
+        document.getElementById('deleteCard').style.display = m.status === 'completed' ? 'block' : 'none';
+        document.getElementById('downloadLeaderboardBtn').style.display = m.status === 'completed' ? 'inline-block' : 'none';
       } catch (err) {
         el.innerHTML = `<p class="error-msg">${err.message}</p>`;
       }
@@ -84,7 +121,32 @@
       }
     });
 
-    // ---- Stats entry rows ----
+    // ---- Scoresheet upload ----
+    document.getElementById('uploadScoresheetBtn').addEventListener('click', async () => {
+      const msg = document.getElementById('scoresheetMsg');
+      const fileInput = document.getElementById('scoresheetFile');
+      if (!fileInput.files.length) {
+        msg.innerHTML = '<p class="error-msg">Choose a PDF file first</p>';
+        return;
+      }
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+      try {
+        await Api.uploadScoresheet(matchId, formData);
+        msg.innerHTML = '<p class="success-msg">Scoresheet uploaded.</p>';
+        loadMatchSummary();
+      } catch (err) {
+        msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    });
+
+    // ---- Stats entry rows (player picked via dropdown, not typed ID) ----
+    function populatePlayerSelect(selectEl) {
+      const options = ['<option value="">Select a player</option>']
+        .concat(matchPlayers.map(p => `<option value="${p.id}">${p.name} (${p.role})</option>`));
+      selectEl.innerHTML = options.join('');
+    }
+
     let statsRowCount = 0;
     function addStatsRow() {
       statsRowCount++;
@@ -92,8 +154,8 @@
       row.className = 'card';
       row.style.marginBottom = '8px';
       row.innerHTML = `
-        <label>Player ID</label>
-        <input type="text" class="stat-player-id" placeholder="player UUID">
+        <label>Player</label>
+        <select class="stat-player-select"></select>
         <label>Runs</label>
         <input type="number" class="stat-runs" value="0">
         <label>Wickets</label>
@@ -106,6 +168,7 @@
         <input type="number" class="stat-runouts" value="0">
       `;
       document.getElementById('statsRows').appendChild(row);
+      populatePlayerSelect(row.querySelector('.stat-player-select'));
     }
     document.getElementById('addStatsRowBtn').addEventListener('click', addStatsRow);
     addStatsRow(); // start with one row
@@ -114,7 +177,7 @@
       const msg = document.getElementById('statsMsg');
       const rows = document.querySelectorAll('#statsRows > div');
       const stats = Array.from(rows).map(row => ({
-        player_id: row.querySelector('.stat-player-id').value.trim(),
+        player_id: row.querySelector('.stat-player-select').value,
         runs: parseInt(row.querySelector('.stat-runs').value) || 0,
         wickets: parseInt(row.querySelector('.stat-wickets').value) || 0,
         catches: parseInt(row.querySelector('.stat-catches').value) || 0,
@@ -123,7 +186,7 @@
       })).filter(s => s.player_id);
 
       if (stats.length === 0) {
-        msg.innerHTML = '<p class="error-msg">Add at least one player row with a Player ID</p>';
+        msg.innerHTML = '<p class="error-msg">Select at least one player</p>';
         return;
       }
 
@@ -151,6 +214,7 @@
       const el = document.getElementById('leaderboard');
       try {
         const rows = await Api.getLeaderboard(matchId);
+        lastLeaderboard = rows;
         if (rows.length === 0) {
           el.innerHTML = '<p class="match-meta">No teams submitted yet.</p>';
           return;
@@ -163,6 +227,47 @@
         `;
       } catch (err) {
         el.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    });
+
+    document.getElementById('downloadLeaderboardBtn').addEventListener('click', async () => {
+      if (lastLeaderboard.length === 0) {
+        try {
+          lastLeaderboard = await Api.getLeaderboard(matchId);
+        } catch (err) {
+          alert('Could not load leaderboard: ' + err.message);
+          return;
+        }
+      }
+      if (lastLeaderboard.length === 0) {
+        alert('No leaderboard data to download yet.');
+        return;
+      }
+
+      const header = 'Rank,Name,Points';
+      const rows = lastLeaderboard.map((r, i) => `${i + 1},"${(r.user?.full_name || 'Unknown').replace(/"/g, '""')}",${r.total_points}`);
+      const csvContent = [header, ...rows].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `leaderboard-${currentMatchLabel || matchId}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('deleteMatchBtn').addEventListener('click', async () => {
+      const msg = document.getElementById('deleteMsg');
+      if (!confirm('This permanently deletes this match and all its team/stats/leaderboard data. This cannot be undone. Continue?')) return;
+      try {
+        await Api.deleteMatch(matchId);
+        alert('Match deleted.');
+        window.location.href = 'dashboard.html';
+      } catch (err) {
+        msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
       }
     });
   </script>

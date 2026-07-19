@@ -4,13 +4,13 @@ A simplified fantasy-sports app (Dream11-style team picking) with no payments an
 
 ## How it works
 
-1. **Admin** creates a match (two teams, match date, selection deadline, squad size, optional credit limit, special-player rules).
-2. **Admin** adds the pool of available players for that match, each with a credit value.
-3. **User** signs up, browses matches, and picks their squad (respecting squad size / credit limit), then optionally assigns special player(s) (e.g. Captain/Vice-Captain) if enabled for that match.
-4. **Admin** locks the match after the deadline.
-5. After the real match ends, **admin** enters each player's stats (runs, wickets, catches, etc.) from the scoresheet.
-6. **Admin** clicks "Finalize" — this calculates every user's total points (applying special player multipliers) and marks the match completed.
-7. **Users** see their team's points and the leaderboard.
+1. **Admin** adds real teams and their players (bulk CSV or one at a time).
+2. **Admin** schedules a match between two teams, picking a date/time in IST — the selection deadline (1 hour before) and player availability (everyone on both team rosters) are both automatic.
+3. **User** signs up, verifies their email, browses matches, and picks an 11-player squad (4-7 from each side), then optionally assigns special player(s) (e.g. Captain/Vice-Captain) if enabled for that match.
+4. **Admin** locks the match after the deadline (this also happens automatically once the deadline passes).
+5. After the real match ends, **admin** uploads the official scoresheet as a PDF (for reference) and enters each player's stats via a name dropdown.
+6. **Admin** clicks "Finalize" — blocked until every player picked by at least one user has stats entered — which calculates every user's total points and marks the match completed.
+7. **Users** see their team's points and the leaderboard; **admin** can download the leaderboard as CSV and delete old completed matches.
 
 ---
 
@@ -21,9 +21,11 @@ A simplified fantasy-sports app (Dream11-style team picking) with no payments an
 3. **If you already ran an earlier version of schema.sql**, also run, in order:
    - `database/migrations/001_email_verification_and_fk_fix.sql`
    - `database/migrations/002_remove_credits_team_based_composition.sql`
+   - `database/migrations/003_scoresheet_and_admin_tools.sql`
 4. Go to **Project Settings > API Keys** and copy:
    - **Project URL** (Data API page) — use just the base, e.g. `https://xxxx.supabase.co`, not the `/rest/v1/` suffix
    - The **secret** key (labeled `sb_secret_...` under "Secret keys" — this is what used to be called `service_role`)
+5. **Create a Storage bucket for scoresheets**: go to **Storage** in the left sidebar → **New bucket** → name it exactly `scoresheets` → toggle it **Public** → **Create bucket**. This is needed for the admin's PDF scoresheet upload feature.
 
 ## 2. Email setup (Resend — free tier)
 
@@ -166,3 +168,12 @@ fantasy-app/
   - When the admin enters a match date/time, it's interpreted as IST wall-clock time and converted to the correct absolute timestamp before saving (`istInputToUtcIso()` in `js/api.js`).
   - Every displayed date (`matches.html`, admin dashboard, match detail, create-match confirmation) is formatted explicitly in the `Asia/Kolkata` timezone (`formatIST()` in `js/api.js`), so it reads correctly no matter where the device is set.
 - **Database changes**: `matches.max_credits` column dropped; `match_players` table dropped entirely. If you already have a live Supabase project, run `database/migrations/002_remove_credits_team_based_composition.sql`.
+
+## 12. What changed in this update (scoresheet PDF, finalize guard, admin cleanup tools)
+
+- **Scoresheet PDF upload**: on the match detail page, admin can upload the official scoresheet as a PDF for record-keeping (stored in Supabase Storage, linked from the match). This is **not** auto-parsed — stats are still entered manually — but it removes the need to hunt down player UUIDs: the stats-entry rows now use a **name dropdown** instead of a raw ID field, which is the real fix for "needing a key to look up players." Requires a `scoresheets` Storage bucket (see setup section 1, step 5).
+- **Finalize is now blocked** if any player picked by at least one user is missing stats — prevents silently scoring someone as 0 because their row was forgotten. The error message names the missing player(s).
+- **Sample image URLs**: the team logo and player photo fields now show real, working placeholder image links (`placehold.co` for logos, `i.pravatar.cc` for player photos) so you can test the app with visuals before you have real image hosting sorted out.
+- **Delete completed matches**: match detail page now has a "Danger Zone" with a delete button, shown only once a match is `completed` — removes the match and all its related teams/stats/leaderboard data (cascades automatically).
+- **Download leaderboard as CSV**: available on the match detail page once a match is completed.
+- **Database changes**: `matches.scoresheet_url` column added. If you already have a live Supabase project, run `database/migrations/003_scoresheet_and_admin_tools.sql`, and create the `scoresheets` Storage bucket manually as described in section 1.

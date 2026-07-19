@@ -75,9 +75,11 @@ const Api = {
   createMatch: (payload) => apiRequest('/admin/matches', { method: 'POST', body: payload }),
   setSpecialRules: (matchId, payload) => apiRequest(`/admin/matches/${matchId}/special-rules`, { method: 'PUT', body: payload }),
   lockMatch: (matchId) => apiRequest(`/admin/matches/${matchId}/lock`, { method: 'PUT' }),
+  uploadScoresheet: (matchId, formData) => apiRequest(`/admin/matches/${matchId}/scoresheet`, { method: 'POST', body: formData, isFormData: true }),
   submitStats: (matchId, payload) => apiRequest(`/admin/matches/${matchId}/stats`, { method: 'POST', body: payload }),
   finalizeMatch: (matchId) => apiRequest(`/admin/matches/${matchId}/finalize`, { method: 'POST' }),
-  getLeaderboard: (matchId) => apiRequest(`/admin/matches/${matchId}/leaderboard`)
+  getLeaderboard: (matchId) => apiRequest(`/admin/matches/${matchId}/leaderboard`),
+  deleteMatch: (matchId) => apiRequest(`/admin/matches/${matchId}`, { method: 'DELETE' })
 };
 
 // Redirect to login if not authenticated - call at top of protected pages

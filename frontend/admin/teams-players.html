@@ -24,14 +24,15 @@
       <label>Short Code</label>
       <input type="text" id="teamCode" placeholder="e.g. MI">
       <label>Logo URL (optional)</label>
-      <input type="text" id="teamLogo" placeholder="https://...">
+      <input type="text" id="teamLogo" placeholder="https://placehold.co/128x128?text=MI">
+      <p class="match-meta">Needs to be a public image link. No logo image ready? Try <code>https://placehold.co/128x128?text=MI</code> (swap "MI" for your team's code) as a free working placeholder, or upload your own image to a free host like <a href="https://imgur.com" target="_blank" rel="noopener">imgur.com</a> and paste its direct image link here.</p>
       <button class="btn" id="addTeamBtn">Add Team</button>
       <div id="teamMsg"></div>
     </div>
 
     <div class="card">
       <h3>Bulk Upload Players (CSV)</h3>
-      <p class="match-meta">CSV columns required: <code>name, real_team_id, role, photo_url</code> (photo_url optional). Role must be one of: batsman, bowler, all-rounder, keeper.</p>
+      <p class="match-meta">CSV columns required: <code>name, real_team_id, role, photo_url</code> (photo_url optional, e.g. <code>https://i.pravatar.cc/150?img=1</code> as a free placeholder). Role must be one of: batsman, bowler, all-rounder, keeper.</p>
       <input type="file" id="csvFile" accept=".csv">
       <button class="btn" id="uploadCsvBtn">Upload CSV</button>
       <div id="csvMsg"></div>
@@ -41,8 +42,8 @@
       <h3>Add a Single Player</h3>
       <label>Name</label>
       <input type="text" id="playerName" placeholder="Player name">
-      <label>Real Team ID</label>
-      <input type="text" id="playerTeamId" placeholder="paste team UUID">
+      <label>Team</label>
+      <select id="playerTeamId"><option value="">Loading teams...</option></select>
       <label>Role</label>
       <select id="playerRole">
         <option value="batsman">Batsman</option>
@@ -50,6 +51,9 @@
         <option value="all-rounder">All-Rounder</option>
         <option value="keeper">Wicket-Keeper</option>
       </select>
+      <label>Photo URL (optional)</label>
+      <input type="text" id="playerPhoto" placeholder="https://i.pravatar.cc/150?img=1">
+      <p class="match-meta">Needs to be a public image link. Try <code>https://i.pravatar.cc/150?img=1</code> (change the number for a different face) as a free working placeholder while testing.</p>
       <button class="btn" id="addPlayerBtn">Add Player</button>
       <div id="playerMsg"></div>
     </div>
@@ -145,8 +149,21 @@
       }
     }
 
+    async function loadTeamDropdown() {
+      const select = document.getElementById('playerTeamId');
+      try {
+        const teams = await Api.listRealTeams();
+        select.innerHTML = teams.length === 0
+          ? '<option value="">No teams yet - add one above first</option>'
+          : '<option value="">Select a team</option>' + teams.map(t => `<option value="${t.id}">${t.name} (${t.short_code})</option>`).join('');
+      } catch (err) {
+        select.innerHTML = '<option value="">Could not load teams</option>';
+      }
+    }
+
     loadTeamsList();
     loadPlayersList();
+    loadTeamDropdown();
 
     document.getElementById('addTeamBtn').addEventListener('click', async () => {
       const msg = document.getElementById('teamMsg');
@@ -156,8 +173,9 @@
           short_code: document.getElementById('teamCode').value.trim(),
           logo_url: document.getElementById('teamLogo').value.trim() || null
         });
-        msg.innerHTML = `<p class="success-msg">Created team "${team.name}" — ID: ${team.id}</p>`;
+        msg.innerHTML = `<p class="success-msg">Created team "${team.name}"</p>`;
         loadTeamsList();
+        loadTeamDropdown();
       } catch (err) {
         msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
       }
@@ -183,13 +201,19 @@
 
     document.getElementById('addPlayerBtn').addEventListener('click', async () => {
       const msg = document.getElementById('playerMsg');
+      const real_team_id = document.getElementById('playerTeamId').value;
+      if (!real_team_id) {
+        msg.innerHTML = '<p class="error-msg">Select a team</p>';
+        return;
+      }
       try {
         const player = await Api.createPlayer({
           name: document.getElementById('playerName').value.trim(),
-          real_team_id: document.getElementById('playerTeamId').value.trim(),
-          role: document.getElementById('playerRole').value
+          real_team_id,
+          role: document.getElementById('playerRole').value,
+          photo_url: document.getElementById('playerPhoto').value.trim() || null
         });
-        msg.innerHTML = `<p class="success-msg">Added player "${player.name}" — ID: ${player.id}</p>`;
+        msg.innerHTML = `<p class="success-msg">Added player "${player.name}"</p>`;
         loadPlayersList();
       } catch (err) {
         msg.innerHTML = `<p class="error-msg">${err.message}</p>`;

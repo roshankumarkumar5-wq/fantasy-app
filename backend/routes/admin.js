@@ -162,6 +162,42 @@ router.put('/matches/:id/lock', async (req, res) => {
   res.json(data);
 });
 
+// Upload the final match scoresheet as a PDF, for reference/record-keeping.
+// This is NOT parsed automatically - stats are still entered via the
+// player dropdown below - but it gives admin (and later, users) a link
+// back to the official scoresheet the points were based on.
+// Requires a Supabase Storage bucket named "scoresheets" (public) - create
+// it once in your Supabase dashboard under Storage > New bucket.
+router.post('/matches/:id/scoresheet', upload.single('file'), async (req, res) => {
+  const { id } = req.params;
+  if (!req.file) return res.status(400).json({ error: 'A PDF file is required (field name: file)' });
+  if (req.file.mimetype !== 'application/pdf') {
+    return res.status(400).json({ error: 'Only PDF files are accepted for the scoresheet' });
+  }
+
+  const filePath = `match-${id}-scoresheet.pdf`;
+
+  const { error: uploadErr } = await supabase.storage
+    .from('scoresheets')
+    .upload(filePath, req.file.buffer, { contentType: 'application/pdf', upsert: true });
+
+  if (uploadErr) {
+    return res.status(500).json({
+      error: `Could not upload scoresheet: ${uploadErr.message}. Make sure a public Storage bucket named "scoresheets" exists in your Supabase project.`
+    });
+  }
+
+  const { data: urlData } = supabase.storage.from('scoresheets').getPublicUrl(filePath);
+
+  const { error: updateErr } = await supabase
+    .from('matches')
+    .update({ scoresheet_url: urlData.publicUrl })
+    .eq('id', id);
+  if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+  res.json({ url: urlData.publicUrl });
+});
+
 // ---------- STATS ENTRY + POINTS CALCULATION ----------
 // After the admin reads the scoresheet PDF, they submit stats here.
 // body: { stats: [{ player_id, runs, wickets, catches, stumpings, run_outs }] }
@@ -206,6 +242,47 @@ router.post('/matches/:id/finalize', async (req, res) => {
     .eq('id', id)
     .single();
   if (matchErr) return res.status(404).json({ error: 'Match not found' });
+
+  // Guard: block finalizing if any player that was actually picked by a user
+  // is missing stats - otherwise their points would silently be treated as 0.
+  const { data: userTeamsForCheck, error: utCheckErr } = await supabase
+    .from('user_teams')
+    .select('id')
+    .eq('match_id', id);
+  if (utCheckErr) return res.status(500).json({ error: utCheckErr.message });
+
+  if (userTeamsForCheck.length > 0) {
+    const userTeamIds = userTeamsForCheck.map(t => t.id);
+
+    const { data: pickedRows, error: pickedErr } = await supabase
+      .from('user_team_players')
+      .select('player_id')
+      .in('user_team_id', userTeamIds);
+    if (pickedErr) return res.status(500).json({ error: pickedErr.message });
+
+    const pickedPlayerIds = [...new Set(pickedRows.map(p => p.player_id))];
+
+    const { data: statsRowsForCheck, error: statsCheckErr } = await supabase
+      .from('player_match_stats')
+      .select('player_id')
+      .eq('match_id', id)
+      .in('player_id', pickedPlayerIds);
+    if (statsCheckErr) return res.status(500).json({ error: statsCheckErr.message });
+
+    const statsPlayerIds = new Set(statsRowsForCheck.map(s => s.player_id));
+    const missingIds = pickedPlayerIds.filter(pid => !statsPlayerIds.has(pid));
+
+    if (missingIds.length > 0) {
+      const { data: missingPlayers } = await supabase
+        .from('players')
+        .select('name')
+        .in('id', missingIds);
+      const names = (missingPlayers || []).map(p => p.name).join(', ');
+      return res.status(400).json({
+        error: `Cannot finalize - stats are missing for ${missingIds.length} player(s) picked by users: ${names || missingIds.join(', ')}. Enter their stats first.`
+      });
+    }
+  }
 
   const { data: specialRules } = await supabase
     .from('match_special_rules')
@@ -262,6 +339,29 @@ router.get('/matches/:id/leaderboard', async (req, res) => {
     .order('total_points', { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
+});
+
+// Delete a completed match and all its related data (user teams, stats, etc.
+// all cascade automatically via foreign keys). Restricted to completed
+// matches only, as a safety guard against accidentally wiping an active one.
+router.delete('/matches/:id', async (req, res) => {
+  const { id } = req.params;
+
+  const { data: match, error: findErr } = await supabase
+    .from('matches')
+    .select('status')
+    .eq('id', id)
+    .maybeSingle();
+  if (findErr || !match) return res.status(404).json({ error: 'Match not found' });
+
+  if (match.status !== 'completed') {
+    return res.status(400).json({ error: 'Only completed matches can be deleted. Lock or finalize this match first if you intend to remove it.' });
+  }
+
+  const { error } = await supabase.from('matches').delete().eq('id', id);
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json({ success: true });
 });
 
 export default router;
