@@ -1,9 +1,11 @@
 import express from 'express';
 import multer from 'multer';
 import { parse } from 'csv-parse/sync';
+import { PDFParse } from 'pdf-parse';
 import { supabase } from '../db/supabase.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { calculateBasePoints, calculateTeamTotal } from '../utils/points.js';
+import { parseScorecardText, normalizeName } from '../utils/scorecardParser.js';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -162,10 +164,15 @@ router.put('/matches/:id/lock', async (req, res) => {
   res.json(data);
 });
 
-// Upload the final match scoresheet as a PDF, for reference/record-keeping.
-// This is NOT parsed automatically - stats are still entered via the
-// player dropdown below - but it gives admin (and later, users) a link
-// back to the official scoresheet the points were based on.
+// Upload the final match scoresheet as a PDF. This does two things:
+// 1. Stores the PDF in Supabase Storage as a permanent reference/record.
+// 2. Best-effort parses it (tuned for CricHeroes-style "Summary Scorecard"
+//    exports) into a CSV of runs/wickets/catches/stumpings/run-outs per
+//    player, keyed by NAME (not ID) - matched against this match's roster
+//    where possible. This CSV is always meant to be reviewed and corrected
+//    by the admin before uploading it back as the official stats source
+//    (via POST /matches/:id/stats/upload-csv) - parsing real-world PDFs
+//    is inherently imperfect, so nothing here is auto-finalized.
 // Requires a Supabase Storage bucket named "scoresheets" (public) - create
 // it once in your Supabase dashboard under Storage > New bucket.
 router.post('/matches/:id/scoresheet', upload.single('file'), async (req, res) => {
@@ -195,11 +202,60 @@ router.post('/matches/:id/scoresheet', upload.single('file'), async (req, res) =
     .eq('id', id);
   if (updateErr) return res.status(500).json({ error: updateErr.message });
 
-  res.json({ url: urlData.publicUrl });
+  // Best-effort parse -> CSV generation
+  let csv = null;
+  let matchedCount = 0;
+  let unmatchedNames = [];
+
+  try {
+    const { data: matchRow } = await supabase
+      .from('matches')
+      .select('team_a_id, team_b_id')
+      .eq('id', id)
+      .single();
+
+    const { data: rosterPlayers } = await supabase
+      .from('players')
+      .select('id, name')
+      .in('real_team_id', [matchRow.team_a_id, matchRow.team_b_id]);
+
+    const rosterByNormalizedName = new Map(
+      (rosterPlayers || []).map(p => [normalizeName(p.name), p])
+    );
+
+    const parser = new PDFParse({ data: req.file.buffer });
+    const textResult = await parser.getText();
+    await parser.destroy();
+
+    const parsedStats = parseScorecardText(textResult.text);
+
+    const rows = ['player_name,player_id,runs,wickets,catches,stumpings,run_outs'];
+    for (const s of parsedStats) {
+      const match = rosterByNormalizedName.get(normalizeName(s.name));
+      const displayName = match ? match.name : s.name;
+      const playerId = match ? match.id : '';
+      if (match) matchedCount++;
+      else unmatchedNames.push(s.name);
+
+      const safeName = displayName.includes(',') ? `"${displayName.replace(/"/g, '""')}"` : displayName;
+      rows.push(`${safeName},${playerId},${s.runs},${s.wickets},${s.catches},${s.stumpings},${s.run_outs}`);
+    }
+    csv = rows.join('\n');
+  } catch (parseErr) {
+    console.error('Scoresheet parse failed (non-fatal):', parseErr.message);
+    // Non-fatal - the PDF is still stored, admin can enter stats manually instead
+  }
+
+  res.json({
+    url: urlData.publicUrl,
+    csv,
+    matched_count: matchedCount,
+    unmatched_names: unmatchedNames
+  });
 });
 
 // ---------- STATS ENTRY + POINTS CALCULATION ----------
-// After the admin reads the scoresheet PDF, they submit stats here.
+// Manual entry path: pick each player from a dropdown and type their stats.
 // body: { stats: [{ player_id, runs, wickets, catches, stumpings, run_outs }] }
 router.post('/matches/:id/stats', async (req, res) => {
   const { id } = req.params;
@@ -229,7 +285,96 @@ router.post('/matches/:id/stats', async (req, res) => {
     .upsert(rows, { onConflict: 'match_id,player_id' });
   if (statsErr) return res.status(500).json({ error: statsErr.message });
 
+  await supabase.from('matches').update({ stats_confirmed_at: new Date().toISOString() }).eq('id', id);
+
   res.json({ success: true, message: 'Stats saved. Call /finalize to compute user team totals.' });
+});
+
+// CSV upload path: the "final scoresheet" - either the CSV generated from
+// parsing a PDF (see POST /matches/:id/scoresheet) after admin has reviewed
+// and corrected it, or a CSV built from scratch. Player is matched by NAME
+// (case/punctuation-insensitive), falling back to player_id if the CSV has
+// one filled in. This upload is what gates whether the match can be
+// finalized (see /finalize below) - not per-player completeness checks.
+// CSV columns: player_name, player_id (optional), runs, wickets, catches, stumpings, run_outs
+router.post('/matches/:id/stats/upload-csv', upload.single('file'), async (req, res) => {
+  const { id } = req.params;
+  if (!req.file) return res.status(400).json({ error: 'A CSV file is required (field name: file)' });
+
+  let records;
+  try {
+    records = parse(req.file.buffer, { columns: true, skip_empty_lines: true, trim: true });
+  } catch (err) {
+    return res.status(400).json({ error: 'Could not parse CSV: ' + err.message });
+  }
+
+  const { data: matchRow, error: matchErr } = await supabase
+    .from('matches')
+    .select('team_a_id, team_b_id')
+    .eq('id', id)
+    .single();
+  if (matchErr) return res.status(404).json({ error: 'Match not found' });
+
+  const { data: rosterPlayers, error: rosterErr } = await supabase
+    .from('players')
+    .select('id, name')
+    .in('real_team_id', [matchRow.team_a_id, matchRow.team_b_id]);
+  if (rosterErr) return res.status(500).json({ error: rosterErr.message });
+
+  const rosterById = new Map((rosterPlayers || []).map(p => [p.id, p]));
+  const rosterByNormalizedName = new Map((rosterPlayers || []).map(p => [normalizeName(p.name), p]));
+
+  const { data: rules, error: rulesErr } = await supabase
+    .from('scoring_rules')
+    .select('*')
+    .eq('id', 1)
+    .single();
+  if (rulesErr) return res.status(500).json({ error: rulesErr.message });
+
+  const rowsToSave = [];
+  const skipped = [];
+
+  for (const r of records) {
+    let player = r.player_id ? rosterById.get(r.player_id.trim()) : null;
+    if (!player && r.player_name) {
+      player = rosterByNormalizedName.get(normalizeName(r.player_name));
+    }
+    if (!player) {
+      skipped.push(r.player_name || r.player_id || '(unnamed row)');
+      continue;
+    }
+
+    const stats = {
+      runs: parseInt(r.runs, 10) || 0,
+      wickets: parseInt(r.wickets, 10) || 0,
+      catches: parseInt(r.catches, 10) || 0,
+      stumpings: parseInt(r.stumpings, 10) || 0,
+      run_outs: parseInt(r.run_outs, 10) || 0
+    };
+
+    rowsToSave.push({
+      match_id: id,
+      player_id: player.id,
+      ...stats,
+      base_points: calculateBasePoints(stats, rules)
+    });
+  }
+
+  if (rowsToSave.length === 0) {
+    return res.status(400).json({
+      error: 'No rows could be matched to players on this match\'s rosters. Check the player_name column spelling, or fill in player_id.',
+      skipped
+    });
+  }
+
+  const { error: saveErr } = await supabase
+    .from('player_match_stats')
+    .upsert(rowsToSave, { onConflict: 'match_id,player_id' });
+  if (saveErr) return res.status(500).json({ error: saveErr.message });
+
+  await supabase.from('matches').update({ stats_confirmed_at: new Date().toISOString() }).eq('id', id);
+
+  res.json({ success: true, saved: rowsToSave.length, skipped });
 });
 
 // Computes every user's team total for this match and marks it completed
@@ -238,50 +383,15 @@ router.post('/matches/:id/finalize', async (req, res) => {
 
   const { data: match, error: matchErr } = await supabase
     .from('matches')
-    .select('id')
+    .select('id, stats_confirmed_at')
     .eq('id', id)
     .single();
   if (matchErr) return res.status(404).json({ error: 'Match not found' });
 
-  // Guard: block finalizing if any player that was actually picked by a user
-  // is missing stats - otherwise their points would silently be treated as 0.
-  const { data: userTeamsForCheck, error: utCheckErr } = await supabase
-    .from('user_teams')
-    .select('id')
-    .eq('match_id', id);
-  if (utCheckErr) return res.status(500).json({ error: utCheckErr.message });
-
-  if (userTeamsForCheck.length > 0) {
-    const userTeamIds = userTeamsForCheck.map(t => t.id);
-
-    const { data: pickedRows, error: pickedErr } = await supabase
-      .from('user_team_players')
-      .select('player_id')
-      .in('user_team_id', userTeamIds);
-    if (pickedErr) return res.status(500).json({ error: pickedErr.message });
-
-    const pickedPlayerIds = [...new Set(pickedRows.map(p => p.player_id))];
-
-    const { data: statsRowsForCheck, error: statsCheckErr } = await supabase
-      .from('player_match_stats')
-      .select('player_id')
-      .eq('match_id', id)
-      .in('player_id', pickedPlayerIds);
-    if (statsCheckErr) return res.status(500).json({ error: statsCheckErr.message });
-
-    const statsPlayerIds = new Set(statsRowsForCheck.map(s => s.player_id));
-    const missingIds = pickedPlayerIds.filter(pid => !statsPlayerIds.has(pid));
-
-    if (missingIds.length > 0) {
-      const { data: missingPlayers } = await supabase
-        .from('players')
-        .select('name')
-        .in('id', missingIds);
-      const names = (missingPlayers || []).map(p => p.name).join(', ');
-      return res.status(400).json({
-        error: `Cannot finalize - stats are missing for ${missingIds.length} player(s) picked by users: ${names || missingIds.join(', ')}. Enter their stats first.`
-      });
-    }
+  if (!match.stats_confirmed_at) {
+    return res.status(400).json({
+      error: 'Save or upload the final stats CSV before finalizing this match (see step 3 on the match detail page).'
+    });
   }
 
   const { data: specialRules } = await supabase

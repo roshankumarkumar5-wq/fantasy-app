@@ -22,6 +22,7 @@ A simplified fantasy-sports app (Dream11-style team picking) with no payments an
    - `database/migrations/001_email_verification_and_fk_fix.sql`
    - `database/migrations/002_remove_credits_team_based_composition.sql`
    - `database/migrations/003_scoresheet_and_admin_tools.sql`
+   - `database/migrations/004_stats_confirmed_flag.sql`
 4. Go to **Project Settings > API Keys** and copy:
    - **Project URL** (Data API page) — use just the base, e.g. `https://xxxx.supabase.co`, not the `/rest/v1/` suffix
    - The **secret** key (labeled `sb_secret_...` under "Secret keys" — this is what used to be called `service_role`)
@@ -171,9 +172,20 @@ fantasy-app/
 
 ## 12. What changed in this update (scoresheet PDF, finalize guard, admin cleanup tools)
 
-- **Scoresheet PDF upload**: on the match detail page, admin can upload the official scoresheet as a PDF for record-keeping (stored in Supabase Storage, linked from the match). This is **not** auto-parsed — stats are still entered manually — but it removes the need to hunt down player UUIDs: the stats-entry rows now use a **name dropdown** instead of a raw ID field, which is the real fix for "needing a key to look up players." Requires a `scoresheets` Storage bucket (see setup section 1, step 5).
-- **Finalize is now blocked** if any player picked by at least one user is missing stats — prevents silently scoring someone as 0 because their row was forgotten. The error message names the missing player(s).
+- **Scoresheet PDF upload**: on the match detail page, admin can upload the official scoresheet as a PDF for record-keeping (stored in Supabase Storage, linked from the match). *(Superseded by section 13 below — it's now also parsed into an editable CSV.)*
+- ~~Finalize is now blocked if any player picked by at least one user is missing stats~~ *(Superseded by section 13 below — replaced with a simpler "final CSV confirmed" check.)*
 - **Sample image URLs**: the team logo and player photo fields now show real, working placeholder image links (`placehold.co` for logos, `i.pravatar.cc` for player photos) so you can test the app with visuals before you have real image hosting sorted out.
 - **Delete completed matches**: match detail page now has a "Danger Zone" with a delete button, shown only once a match is `completed` — removes the match and all its related teams/stats/leaderboard data (cascades automatically).
 - **Download leaderboard as CSV**: available on the match detail page once a match is completed.
 - **Database changes**: `matches.scoresheet_url` column added. If you already have a live Supabase project, run `database/migrations/003_scoresheet_and_admin_tools.sql`, and create the `scoresheets` Storage bucket manually as described in section 1.
+
+## 13. What changed in this update (PDF-to-CSV parsing, name-keyed stats, simpler finalize check)
+
+- **Scoresheet PDF is now actually parsed.** Uploading a PDF in step 2 of the match detail page (tuned for **CricHeroes-style "Summary Scorecard" exports**, tested against a real sample match) extracts runs, wickets, catches, stumpings, and run-outs per player and returns a **downloadable CSV**, keyed by player **name** (not ID) — matched against this match's roster where possible. Unmatched names are flagged in the response so you know what to check.
+  - This is genuinely a best-effort parser for one specific real-world PDF format. If your scoresheet comes from a different app/export, it may not parse cleanly — the CSV will just be empty/wrong, not crash anything, and you can always fall back to manual entry.
+  - **Always review the generated CSV before uploading it back.** Real scorecards are messy (e.g. a player might be "Kumar 17" in your roster but "Kumar (wk)" in the scorecard) — the parser does its best but won't always get every name right.
+- **New: Upload Final Stats CSV** (step 3 on match detail) — upload a CSV (the one generated in step 2, edited, or one you build yourself) with columns `player_name, player_id, runs, wickets, catches, stumpings, run_outs`. Matching is by name first (case/punctuation-insensitive), falling back to `player_id` if provided. This is what the app now considers the "official" final stats source.
+- **Finalize check simplified**: instead of validating every individual picked player has stats, finalize now just checks that a final stats CSV (or manual save) has been submitted at least once for this match (`matches.stats_confirmed_at` is set). Simpler and matches how you'd actually work with a real scoresheet — you upload the whole thing at once, not player-by-player.
+- **Manual dropdown entry still available** as a fallback/alternative, unchanged from before, and also sets the same confirmation flag.
+- **Database changes**: `matches.stats_confirmed_at` column added. If you already have a live Supabase project, run `database/migrations/004_stats_confirmed_flag.sql`.
+- **New dependency**: `pdf-parse` (pinned to `2.4.5`) added to `backend/package.json` — run `npm install` in your `backend` folder to pick it up before your next local run or deploy.

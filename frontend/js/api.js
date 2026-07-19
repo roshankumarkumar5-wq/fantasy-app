@@ -77,6 +77,7 @@ const Api = {
   lockMatch: (matchId) => apiRequest(`/admin/matches/${matchId}/lock`, { method: 'PUT' }),
   uploadScoresheet: (matchId, formData) => apiRequest(`/admin/matches/${matchId}/scoresheet`, { method: 'POST', body: formData, isFormData: true }),
   submitStats: (matchId, payload) => apiRequest(`/admin/matches/${matchId}/stats`, { method: 'POST', body: payload }),
+  uploadStatsCsv: (matchId, formData) => apiRequest(`/admin/matches/${matchId}/stats/upload-csv`, { method: 'POST', body: formData, isFormData: true }),
   finalizeMatch: (matchId) => apiRequest(`/admin/matches/${matchId}/finalize`, { method: 'POST' }),
   getLeaderboard: (matchId) => apiRequest(`/admin/matches/${matchId}/leaderboard`),
   deleteMatch: (matchId) => apiRequest(`/admin/matches/${matchId}`, { method: 'DELETE' })

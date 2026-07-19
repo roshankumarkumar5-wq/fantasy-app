@@ -58,6 +58,7 @@ create table matches (
   squad_size int not null default 11,
   status text not null default 'upcoming' check (status in ('upcoming', 'locked', 'completed')),
   scoresheet_url text,   -- final PDF scoresheet uploaded by admin, for reference
+  stats_confirmed_at timestamptz,  -- set when admin saves/uploads final stats; gates finalize
   created_at timestamptz default now()
 );
 

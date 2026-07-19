@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="../css/style.css">
 </head>
 <body>
+  <script>window.API_BASE_URL = 'https://fantasy-app-backend-znyu.onrender.com/api';</script>
   <div class="topbar">
     <h1>Match Detail</h1>
     <button onclick="window.location.href='dashboard.html'">Back</button>
@@ -22,26 +23,35 @@
     </div>
 
     <div class="card">
-      <h3>2. Upload Final Scoresheet (PDF)</h3>
-      <p class="match-meta">Upload the official match scoresheet as a PDF for your records. This is stored as a reference link only — you'll still enter each player's stats below using the dropdown (their names are the "key", so there's no need to look up IDs).</p>
+      <h3>2. Upload Scoresheet PDF (generates a CSV for you)</h3>
+      <p class="match-meta">Upload the official match scoresheet PDF. It's stored for your records, and best-effort parsed into a CSV of runs/wickets/catches/stumpings/run-outs per player (works well with CricHeroes-style scorecards). Player names are the key — download the CSV, fix anything that looks wrong in Excel, then upload it in step 3.</p>
       <div id="currentScoresheet"></div>
       <input type="file" id="scoresheetFile" accept="application/pdf">
-      <button class="btn secondary" id="uploadScoresheetBtn">Upload Scoresheet</button>
+      <button class="btn secondary" id="uploadScoresheetBtn">Upload &amp; Generate CSV</button>
       <div id="scoresheetMsg"></div>
+      <button class="btn" id="downloadGeneratedCsvBtn" style="display:none;">Download Generated CSV</button>
     </div>
 
     <div class="card">
-      <h3>3. Enter Match Stats</h3>
-      <p class="match-meta">Add a row per player who played, selecting them by name. Points are calculated automatically from the global scoring rules.</p>
+      <h3>3. Upload Final Stats CSV</h3>
+      <p class="match-meta">Upload the CSV — either the one generated in step 2 (edited/corrected), or one you build yourself. Columns: <code>player_name, player_id, runs, wickets, catches, stumpings, run_outs</code> (player_id is optional — matching is done by name). This is what unlocks the Finalize step below.</p>
+      <input type="file" id="statsCsvFile" accept=".csv">
+      <button class="btn" id="uploadStatsCsvBtn">Upload Stats CSV</button>
+      <div id="statsCsvMsg"></div>
+    </div>
+
+    <div class="card">
+      <h3>Or enter stats manually</h3>
+      <p class="match-meta">Alternative to the CSV upload above — add a row per player and pick them by name.</p>
       <div id="statsRows"></div>
       <button class="btn secondary" id="addStatsRowBtn">+ Add Player Row</button>
-      <button class="btn" id="saveStatsBtn">Save Stats</button>
+      <button class="btn secondary" id="saveStatsBtn">Save Manual Rows</button>
       <div id="statsMsg"></div>
     </div>
 
     <div class="card">
       <h3>4. Finalize Match &amp; Compute Points</h3>
-      <p class="match-meta">Calculates every user's team total using saved stats and special player multipliers, then marks the match completed. This is blocked if any picked player is still missing stats.</p>
+      <p class="match-meta">Calculates every user's team total and marks the match completed. Blocked until final stats have been saved or uploaded (step 3 or the manual entry above).</p>
       <button class="btn" id="finalizeBtn">Finalize Match</button>
       <div id="finalizeMsg"></div>
     </div>
@@ -61,7 +71,6 @@
     </div>
   </div>
 
-  <script>window.API_BASE_URL = 'https://fantasy-app-backend-znyu.onrender.com/api';</script>
   <script src="../js/api.js"></script>
   <script>
     requireAdminLogin();
@@ -70,9 +79,22 @@
     const matchId = params.get('matchId');
     if (!matchId) window.location.href = 'dashboard.html';
 
-    let matchPlayers = []; // [{id, name, role, real_team_id}]
+    let matchPlayers = [];
     let lastLeaderboard = [];
     let currentMatchLabel = '';
+    let generatedCsvContent = null;
+
+    function downloadTextFile(filename, content, mime) {
+      const blob = new Blob([content], { type: mime });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
 
     async function loadMatchSummary() {
       const el = document.getElementById('matchSummary');
@@ -90,18 +112,16 @@
           <p class="match-meta">Special players: ${data.special_rules.enabled ? 'Enabled (' + data.special_rules.multipliers.join('x, ') + 'x)' : 'Disabled'}</p>
           <span class="status-badge status-${m.status}">${m.status}</span>
           <p class="match-meta" style="margin-top:8px;">${data.players.length} player(s) available (auto-derived from both teams' rosters)</p>
+          <p class="match-meta">Final stats: ${m.stats_confirmed_at ? '<span class="success-msg" style="display:inline">Confirmed ✓ (' + formatIST(m.stats_confirmed_at) + ')</span>' : 'Not yet saved/uploaded'}</p>
         `;
 
-        // Populate stats-row player dropdowns now that we have the roster
         document.querySelectorAll('.stat-player-select').forEach(populatePlayerSelect);
 
-        // Show current scoresheet link if one exists
         const scoresheetEl = document.getElementById('currentScoresheet');
         scoresheetEl.innerHTML = m.scoresheet_url
           ? `<p class="success-msg">Current scoresheet: <a href="${m.scoresheet_url}" target="_blank" rel="noopener">View PDF</a></p>`
           : `<p class="match-meta">No scoresheet uploaded yet.</p>`;
 
-        // Show delete button only for completed matches
         document.getElementById('deleteCard').style.display = m.status === 'completed' ? 'block' : 'none';
         document.getElementById('downloadLeaderboardBtn').style.display = m.status === 'completed' ? 'inline-block' : 'none';
       } catch (err) {
@@ -121,35 +141,77 @@
       }
     });
 
-    // ---- Scoresheet upload ----
+    // ---- Step 2: Upload scoresheet PDF, get generated CSV back ----
     document.getElementById('uploadScoresheetBtn').addEventListener('click', async () => {
       const msg = document.getElementById('scoresheetMsg');
+      const downloadBtn = document.getElementById('downloadGeneratedCsvBtn');
       const fileInput = document.getElementById('scoresheetFile');
+      downloadBtn.style.display = 'none';
+      generatedCsvContent = null;
+
       if (!fileInput.files.length) {
         msg.innerHTML = '<p class="error-msg">Choose a PDF file first</p>';
         return;
       }
       const formData = new FormData();
       formData.append('file', fileInput.files[0]);
+      msg.innerHTML = '<p class="match-meta">Uploading and parsing...</p>';
       try {
-        await Api.uploadScoresheet(matchId, formData);
-        msg.innerHTML = '<p class="success-msg">Scoresheet uploaded.</p>';
+        const result = await Api.uploadScoresheet(matchId, formData);
+        let html = '<p class="success-msg">Scoresheet uploaded.</p>';
+        if (result.csv) {
+          generatedCsvContent = result.csv;
+          downloadBtn.style.display = 'inline-block';
+          html += `<p class="success-msg">Generated stats for ${result.matched_count} matched player(s).</p>`;
+          if (result.unmatched_names && result.unmatched_names.length > 0) {
+            html += `<p class="error-msg">Could not match: ${result.unmatched_names.join(', ')} — these rows are still in the CSV with a blank player_id; fill it in manually or fix the spelling before uploading in step 3.</p>`;
+          }
+        } else {
+          html += '<p class="match-meta">Could not auto-generate a CSV from this PDF (format not recognized) — use manual entry or build a CSV yourself for step 3.</p>';
+        }
+        msg.innerHTML = html;
         loadMatchSummary();
       } catch (err) {
         msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
       }
     });
 
-    // ---- Stats entry rows (player picked via dropdown, not typed ID) ----
+    document.getElementById('downloadGeneratedCsvBtn').addEventListener('click', () => {
+      if (!generatedCsvContent) return;
+      downloadTextFile(`stats-${currentMatchLabel || matchId}.csv`, generatedCsvContent, 'text/csv');
+    });
+
+    // ---- Step 3: Upload final stats CSV ----
+    document.getElementById('uploadStatsCsvBtn').addEventListener('click', async () => {
+      const msg = document.getElementById('statsCsvMsg');
+      const fileInput = document.getElementById('statsCsvFile');
+      if (!fileInput.files.length) {
+        msg.innerHTML = '<p class="error-msg">Choose a CSV file first</p>';
+        return;
+      }
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+      try {
+        const result = await Api.uploadStatsCsv(matchId, formData);
+        let html = `<p class="success-msg">Saved stats for ${result.saved} player(s). Final stats are now confirmed.</p>`;
+        if (result.skipped && result.skipped.length > 0) {
+          html += `<p class="error-msg">Skipped (no matching player found): ${result.skipped.join(', ')}</p>`;
+        }
+        msg.innerHTML = html;
+        loadMatchSummary();
+      } catch (err) {
+        msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    });
+
+    // ---- Manual entry (fallback) ----
     function populatePlayerSelect(selectEl) {
       const options = ['<option value="">Select a player</option>']
         .concat(matchPlayers.map(p => `<option value="${p.id}">${p.name} (${p.role})</option>`));
       selectEl.innerHTML = options.join('');
     }
 
-    let statsRowCount = 0;
     function addStatsRow() {
-      statsRowCount++;
       const row = document.createElement('div');
       row.className = 'card';
       row.style.marginBottom = '8px';
@@ -171,7 +233,7 @@
       populatePlayerSelect(row.querySelector('.stat-player-select'));
     }
     document.getElementById('addStatsRowBtn').addEventListener('click', addStatsRow);
-    addStatsRow(); // start with one row
+    addStatsRow();
 
     document.getElementById('saveStatsBtn').addEventListener('click', async () => {
       const msg = document.getElementById('statsMsg');
@@ -192,7 +254,8 @@
 
       try {
         await Api.submitStats(matchId, { stats });
-        msg.innerHTML = `<p class="success-msg">Saved stats for ${stats.length} player(s)</p>`;
+        msg.innerHTML = `<p class="success-msg">Saved stats for ${stats.length} player(s). Final stats are now confirmed.</p>`;
+        loadMatchSummary();
       } catch (err) {
         msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
       }
@@ -243,20 +306,9 @@
         alert('No leaderboard data to download yet.');
         return;
       }
-
       const header = 'Rank,Name,Points';
       const rows = lastLeaderboard.map((r, i) => `${i + 1},"${(r.user?.full_name || 'Unknown').replace(/"/g, '""')}",${r.total_points}`);
-      const csvContent = [header, ...rows].join('\n');
-
-      const blob = new Blob([csvContent], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `leaderboard-${currentMatchLabel || matchId}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      downloadTextFile(`leaderboard-${currentMatchLabel || matchId}.csv`, [header, ...rows].join('\n'), 'text/csv');
     });
 
     document.getElementById('deleteMatchBtn').addEventListener('click', async () => {
