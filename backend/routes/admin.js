@@ -474,4 +474,35 @@ router.delete('/matches/:id', async (req, res) => {
   res.json({ success: true });
 });
 
+// ---------- OTP LIST (testing tool) ----------
+// Lists every user who currently has a pending OTP - useful for testing
+// signup/login/reset flows end-to-end before you've connected a real SMS
+// provider in backend/utils/sms.js.
+// NOTE: this is a deliberate testing convenience. Once real users are
+// relying on this app with a real SMS provider connected, consider
+// removing or restricting this endpoint further, since it exposes live
+// verification codes (even though only to authenticated admins).
+router.get('/users/otp-list', async (req, res) => {
+  const { data, error } = await supabase
+    .from('users')
+    .select('full_name, email, phone, otp_code, otp_purpose, otp_expires_at')
+    .not('otp_code', 'is', null)
+    .order('otp_expires_at', { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  const now = new Date();
+  const rows = data.map(u => ({
+    full_name: u.full_name,
+    email: u.email,
+    phone: u.phone,
+    otp_code: u.otp_code,
+    otp_purpose: u.otp_purpose,
+    otp_expires_at: u.otp_expires_at,
+    is_expired: now > new Date(u.otp_expires_at)
+  }));
+
+  res.json(rows);
+});
+
 export default router;

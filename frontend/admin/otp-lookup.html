@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pending OTPs - Admin</title>
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <script>window.API_BASE_URL = 'https://fantasy-app-backend-znyu.onrender.com/api';</script>
+  <div class="topbar">
+    <h1>Admin Panel</h1>
+    <button id="logoutBtn">Log Out</button>
+  </div>
+  <div class="container">
+    <div class="tab-nav">
+      <a href="dashboard.html">Matches</a>
+      <a href="teams-players.html">Teams &amp; Players</a>
+      <a href="otp-lookup.html" class="active">OTP Lookup</a>
+    </div>
+
+    <div class="card">
+      <h3>Pending Verification Codes</h3>
+      <p class="match-meta">Testing tool — no SMS provider is connected yet, so this lists every account with a currently-pending code instead of waiting for a text. Once a real SMS provider is wired up, this becomes unnecessary for day-to-day use (but stays available for you as admin).</p>
+      <button class="btn secondary" id="refreshBtn">Refresh</button>
+    </div>
+
+    <div id="otpTableWrap"><p class="match-meta">Loading...</p></div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script>
+    requireAdminLogin();
+
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      Auth.clearSession();
+      window.location.href = '../login.html';
+    });
+
+    function purposeLabel(p) {
+      return p === 'reset_password' ? 'Password reset' : 'Phone verification';
+    }
+
+    async function loadOtps() {
+      const wrap = document.getElementById('otpTableWrap');
+      wrap.innerHTML = '<p class="match-meta">Loading...</p>';
+      try {
+        const rows = await Api.listOtps();
+        if (rows.length === 0) {
+          wrap.innerHTML = '<div class="card"><p class="match-meta">No pending codes right now.</p></div>';
+          return;
+        }
+        wrap.innerHTML = `
+          <div class="card">
+            <table class="admin-table">
+              <tr><th>Name</th><th>Email</th><th>Phone</th><th>OTP</th><th>Reason</th><th>Status</th></tr>
+              ${rows.map(r => `
+                <tr>
+                  <td>${r.full_name}</td>
+                  <td>${r.email}</td>
+                  <td>${r.phone || '-'}</td>
+                  <td style="font-weight:700; letter-spacing:1px;">${r.otp_code}</td>
+                  <td>${purposeLabel(r.otp_purpose)}</td>
+                  <td class="${r.is_expired ? 'error-msg' : 'success-msg'}">${r.is_expired ? 'Expired' : 'Valid'}</td>
+                </tr>
+              `).join('')}
+            </table>
+          </div>
+        `;
+      } catch (err) {
+        wrap.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    }
+
+    document.getElementById('refreshBtn').addEventListener('click', loadOtps);
+    loadOtps();
+  </script>
+</body>
+</html>

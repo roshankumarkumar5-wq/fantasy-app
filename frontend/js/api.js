@@ -84,7 +84,8 @@ const Api = {
   uploadStatsCsv: (matchId, formData) => apiRequest(`/admin/matches/${matchId}/stats/upload-csv`, { method: 'POST', body: formData, isFormData: true }),
   finalizeMatch: (matchId) => apiRequest(`/admin/matches/${matchId}/finalize`, { method: 'POST' }),
   getLeaderboard: (matchId) => apiRequest(`/admin/matches/${matchId}/leaderboard`),
-  deleteMatch: (matchId) => apiRequest(`/admin/matches/${matchId}`, { method: 'DELETE' })
+  deleteMatch: (matchId) => apiRequest(`/admin/matches/${matchId}`, { method: 'DELETE' }),
+  listOtps: () => apiRequest('/admin/users/otp-list')
 };
 
 // Redirect to login if not authenticated - call at top of protected pages
