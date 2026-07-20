@@ -15,8 +15,9 @@
       <input type="text" id="fullName" placeholder="Your name">
       <label>Email</label>
       <input type="email" id="email" placeholder="you@example.com">
-      <label>Phone (optional)</label>
+      <label>Phone Number</label>
       <input type="tel" id="phone" placeholder="+91 9999999999">
+      <p class="match-meta">We'll text a verification code to this number, so make sure it can receive SMS.</p>
       <label>Password</label>
       <input type="password" id="password" placeholder="At least 6 characters">
       <button class="btn" id="signupBtn">Sign Up</button>
@@ -36,8 +37,8 @@
       const errorMsg = document.getElementById('errorMsg');
       errorMsg.textContent = '';
 
-      if (!full_name || !email || !password) {
-        errorMsg.textContent = 'Name, email, and password are required';
+      if (!full_name || !email || !phone || !password) {
+        errorMsg.textContent = 'Name, email, phone, and password are all required';
         return;
       }
       if (password.length < 6) {
@@ -47,7 +48,7 @@
 
       try {
         const result = await Api.signup({ full_name, email, phone, password });
-        window.location.href = `verify-email.html?email=${encodeURIComponent(result.email)}`;
+        window.location.href = `verify-email.html?email=${encodeURIComponent(result.email)}&phone=${encodeURIComponent(result.phone || phone)}`;
       } catch (err) {
         errorMsg.textContent = err.message;
       }

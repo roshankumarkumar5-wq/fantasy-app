@@ -6,10 +6,10 @@ A simplified fantasy-sports app (Dream11-style team picking) with no payments an
 
 1. **Admin** adds real teams and their players (bulk CSV or one at a time).
 2. **Admin** schedules a match between two teams, picking a date/time in IST — the selection deadline (1 hour before) and player availability (everyone on both team rosters) are both automatic.
-3. **User** signs up, verifies their email, browses matches, and picks an 11-player squad (4-7 from each side), then optionally assigns special player(s) (e.g. Captain/Vice-Captain) if enabled for that match.
+3. **User** signs up, verifies their phone number via a texted code, browses matches, and picks an 11-player squad (4-7 from each side), then optionally assigns special player(s) (e.g. Captain/Vice-Captain) if enabled for that match.
 4. **Admin** locks the match after the deadline (this also happens automatically once the deadline passes).
-5. After the real match ends, **admin** uploads the official scoresheet as a PDF (for reference) and enters each player's stats via a name dropdown.
-6. **Admin** clicks "Finalize" — blocked until every player picked by at least one user has stats entered — which calculates every user's total points and marks the match completed.
+5. After the real match ends, **admin** uploads the official scoresheet as a PDF — it's stored for reference and best-effort parsed into an editable CSV — then uploads the reviewed CSV (or enters stats manually) as the final stats source.
+6. **Admin** clicks "Finalize" — blocked until final stats have been saved/uploaded — which calculates every user's total points and marks the match completed.
 7. **Users** see their team's points and the leaderboard; **admin** can download the leaderboard as CSV and delete old completed matches.
 
 ---
@@ -23,18 +23,15 @@ A simplified fantasy-sports app (Dream11-style team picking) with no payments an
    - `database/migrations/002_remove_credits_team_based_composition.sql`
    - `database/migrations/003_scoresheet_and_admin_tools.sql`
    - `database/migrations/004_stats_confirmed_flag.sql`
+   - `database/migrations/005_sms_verification.sql`
 4. Go to **Project Settings > API Keys** and copy:
    - **Project URL** (Data API page) — use just the base, e.g. `https://xxxx.supabase.co`, not the `/rest/v1/` suffix
    - The **secret** key (labeled `sb_secret_...` under "Secret keys" — this is what used to be called `service_role`)
 5. **Create a Storage bucket for scoresheets**: go to **Storage** in the left sidebar → **New bucket** → name it exactly `scoresheets` → toggle it **Public** → **Create bucket**. This is needed for the admin's PDF scoresheet upload feature.
 
-## 2. Email setup (Resend — free tier)
+## 2. SMS setup (no provider wired in yet — see section 13)
 
-Signup/login now sends real verification and password-reset codes by email, using [Resend](https://resend.com):
-
-1. Sign up free at https://resend.com (no credit card needed).
-2. Go to **API Keys** and create one.
-3. **Free tier limitation**: until you verify your own domain in Resend, you can only send emails *to* the address you signed up to Resend with. This is fine for testing with your own email, but real users won't receive codes until you verify a domain (Resend's dashboard walks you through this — it's free, just requires adding a DNS record).
+Signup/login verification codes are sent via SMS, not email — but **no SMS provider is connected by default**. Until you pick one and fill in `SMS_API_URL`/`SMS_API_KEY`, codes are just printed to your backend's server console/logs, so you can still fully test signup and login locally without signing up for anything yet. See section 13 for provider options and where to wire one in (`backend/utils/sms.js`).
 
 ## 3. Backend setup
 
@@ -49,17 +46,18 @@ Edit `.env`:
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=your-secret-key
 JWT_SECRET=some-long-random-string
-RESEND_API_KEY=your-resend-api-key
-FROM_EMAIL=onboarding@resend.dev
+SMS_API_URL=
+SMS_API_KEY=
 PORT=4000
 ```
+(Leave `SMS_API_URL`/`SMS_API_KEY` blank until you've picked a provider — see section 13.)
 
 Run locally:
 ```bash
 npm run dev
 ```
 
-Test it's alive: open `http://localhost:4000` — you should see `{"status":"Fantasy App API running"}`.
+Test it's alive: open `http://localhost:4000` — you should see `{"status":"Fantasy App API running"}`. When you sign up while `SMS_API_KEY` is blank, check this terminal's output — the verification code will be printed there (e.g. `[SMS not configured] Would have sent to +91...: "Your code..."`), so you can copy it into the verify page manually.
 
 ### Creating your first admin account
 
@@ -189,3 +187,16 @@ fantasy-app/
 - **Manual dropdown entry still available** as a fallback/alternative, unchanged from before, and also sets the same confirmation flag.
 - **Database changes**: `matches.stats_confirmed_at` column added. If you already have a live Supabase project, run `database/migrations/004_stats_confirmed_flag.sql`.
 - **New dependency**: `pdf-parse` (pinned to `2.4.5`) added to `backend/package.json` — run `npm install` in your `backend` folder to pick it up before your next local run or deploy.
+
+## 14. What changed in this update (SMS verification instead of email)
+
+- **Verification codes now go by SMS, not email.** Signup, resend, and password-reset codes are texted to the user's phone number instead of emailed — this sidesteps the domain-verification requirement Resend needed for sending to arbitrary recipients.
+- **Phone number is now required at signup** (previously optional) — it's the only place codes are delivered, so there's nothing to verify without it.
+- **No SMS provider is wired in yet.** `backend/utils/sms.js` is a deliberately swappable structure — `sendSms(phone, message)` is the one function to fill in once you've picked a provider. Until then, codes are printed to your backend's server logs instead of actually being sent, so you can keep testing signup/login without setting anything up.
+- **Provider options** (India-focused, since phone numbers here are `+91`): SMS to Indian numbers technically requires DLT (TRAI) registration if you send under your own name — a real, government-mandated process, not a "gotcha" from any provider. A few practical starting points:
+  - **StartMessaging** or **Message Central (Verify Now)** — OTP-specific APIs that handle DLT under their own registered entity, so there's no paperwork on your end; both offer a small batch of free test messages, then pay-as-you-go (roughly ₹0.12–0.25 per OTP).
+  - **Fast2SMS** or **MSG91** — larger, more established Indian SMS platforms, also with free trial credits; you'd eventually want your own DLT registration if sending serious volume under your own brand name.
+  - Whichever you pick, their dashboard will show you the exact request format for their API — drop that into the marked block inside `sendSms()` in `sms.js`, and add their API URL/key to your `.env`.
+- **Email is no longer used for verification at all** — `backend/utils/email.js` and the `RESEND_API_KEY`/`FROM_EMAIL` env vars have been removed. Email remains the login identifier (still unique per account), it just doesn't deliver anything anymore.
+- **Database changes**: `users.email_verified` renamed to `users.phone_verified`. If you already have a live Supabase project, run `database/migrations/005_sms_verification.sql`.
+- **Frontend error handling improved**: the API client now attaches structured fields (like `needsVerification`) from backend error responses onto the thrown JS error, so pages like `login.html` branch on that flag directly instead of matching on message text — more robust if wording ever changes again.

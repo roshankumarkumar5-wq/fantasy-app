@@ -15,10 +15,10 @@ create table users (
   full_name text not null,
   phone text,
   role text not null default 'user' check (role in ('user', 'admin')),
-  email_verified boolean not null default false,
+  phone_verified boolean not null default false,
   otp_code text,
   otp_expires_at timestamptz,
-  otp_purpose text,   -- 'verify_email' or 'reset_password'
+  otp_purpose text,   -- 'verify_phone' or 'reset_password'
   created_at timestamptz default now()
 );
 

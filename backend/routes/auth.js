@@ -2,7 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { supabase } from '../db/supabase.js';
-import { sendEmail, generateOtp, otpEmailHtml } from '../utils/email.js';
+import { sendSms, generateOtp, otpSmsText } from '../utils/sms.js';
 
 const router = express.Router();
 const OTP_TTL_MINUTES = 15;
@@ -19,11 +19,13 @@ function issueToken(user) {
   );
 }
 
-// POST /api/auth/signup - creates account, sends a verification code, does NOT log in yet
+// POST /api/auth/signup - creates account, sends a verification code via SMS,
+// does NOT log in yet. Email remains the login identifier; phone is now
+// required since it's the only place the verification code is delivered.
 router.post('/signup', async (req, res) => {
   const { email, password, full_name, phone } = req.body;
-  if (!email || !password || !full_name) {
-    return res.status(400).json({ error: 'email, password, and full_name are required' });
+  if (!email || !password || !full_name || !phone) {
+    return res.status(400).json({ error: 'email, password, full_name, and phone are required' });
   }
 
   const { data: existing } = await supabase
@@ -43,25 +45,27 @@ router.post('/signup', async (req, res) => {
     .from('users')
     .insert({
       email, password_hash, full_name, phone, role: 'user',
-      email_verified: false,
-      otp_code, otp_expires_at: otpExpiryTimestamp(), otp_purpose: 'verify_email'
+      phone_verified: false,
+      otp_code, otp_expires_at: otpExpiryTimestamp(), otp_purpose: 'verify_phone'
     })
-    .select('id, email, full_name, role')
+    .select('id, email, full_name, role, phone')
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
 
   try {
-    await sendEmail(email, 'Verify your email', otpEmailHtml(otp_code, 'verify_email'));
-  } catch (emailErr) {
-    console.error('Failed to send verification email:', emailErr.message);
-    // Don't fail signup just because email sending failed - user can use "resend code"
+    await sendSms(phone, otpSmsText(otp_code, 'verify_phone'));
+  } catch (smsErr) {
+    console.error('Failed to send verification SMS:', smsErr.message);
+    // Don't fail signup just because SMS sending failed - user can use "resend code"
   }
 
-  res.json({ message: 'Account created. Check your email for a verification code.', email: data.email });
+  res.json({ message: 'Account created. Check your phone for a verification code.', email: data.email, phone: data.phone });
 });
 
-// POST /api/auth/verify-email - confirms the OTP and logs the user in
+// POST /api/auth/verify-email - confirms the OTP (sent via SMS) and logs the user in.
+// Kept this route path for compatibility with existing frontend links, but it
+// now verifies the phone-delivered code, not an email-delivered one.
 router.post('/verify-email', async (req, res) => {
   const { email, code } = req.body;
   if (!email || !code) return res.status(400).json({ error: 'email and code are required' });
@@ -74,7 +78,7 @@ router.post('/verify-email', async (req, res) => {
 
   if (error || !user) return res.status(404).json({ error: 'Account not found' });
 
-  if (user.otp_purpose !== 'verify_email' || user.otp_code !== code) {
+  if (user.otp_purpose !== 'verify_phone' || user.otp_code !== code) {
     return res.status(400).json({ error: 'Invalid verification code' });
   }
   if (new Date() > new Date(user.otp_expires_at)) {
@@ -83,7 +87,7 @@ router.post('/verify-email', async (req, res) => {
 
   const { error: updateErr } = await supabase
     .from('users')
-    .update({ email_verified: true, otp_code: null, otp_expires_at: null, otp_purpose: null })
+    .update({ phone_verified: true, otp_code: null, otp_expires_at: null, otp_purpose: null })
     .eq('id', user.id);
 
   if (updateErr) return res.status(500).json({ error: updateErr.message });
@@ -95,17 +99,17 @@ router.post('/verify-email', async (req, res) => {
   });
 });
 
-// POST /api/auth/resend-code - resend either a verify_email or reset_password code
+// POST /api/auth/resend-code - resend either a verify_phone or reset_password code via SMS
 router.post('/resend-code', async (req, res) => {
-  const { email, purpose = 'verify_email' } = req.body;
+  const { email, purpose = 'verify_phone' } = req.body;
   if (!email) return res.status(400).json({ error: 'email is required' });
-  if (!['verify_email', 'reset_password'].includes(purpose)) {
+  if (!['verify_phone', 'reset_password'].includes(purpose)) {
     return res.status(400).json({ error: 'Invalid purpose' });
   }
 
   const { data: user, error } = await supabase
     .from('users')
-    .select('id, email')
+    .select('id, email, phone')
     .eq('email', email)
     .maybeSingle();
 
@@ -121,23 +125,22 @@ router.post('/resend-code', async (req, res) => {
     .eq('id', user.id);
 
   try {
-    const subject = purpose === 'reset_password' ? 'Your password reset code' : 'Your verification code';
-    await sendEmail(user.email, subject, otpEmailHtml(otp_code, purpose));
-  } catch (emailErr) {
-    console.error('Failed to send code email:', emailErr.message);
+    await sendSms(user.phone, otpSmsText(otp_code, purpose));
+  } catch (smsErr) {
+    console.error('Failed to send code SMS:', smsErr.message);
   }
 
   res.json({ message: 'If an account exists for this email, a code has been sent.' });
 });
 
-// POST /api/auth/forgot-password - kicks off the reset-password OTP flow
+// POST /api/auth/forgot-password - kicks off the reset-password OTP flow via SMS
 router.post('/forgot-password', async (req, res) => {
   const { email } = req.body;
   if (!email) return res.status(400).json({ error: 'email is required' });
 
   const { data: user } = await supabase
     .from('users')
-    .select('id, email')
+    .select('id, phone')
     .eq('email', email)
     .maybeSingle();
 
@@ -149,14 +152,14 @@ router.post('/forgot-password', async (req, res) => {
       .eq('id', user.id);
 
     try {
-      await sendEmail(user.email, 'Your password reset code', otpEmailHtml(otp_code, 'reset_password'));
-    } catch (emailErr) {
-      console.error('Failed to send reset email:', emailErr.message);
+      await sendSms(user.phone, otpSmsText(otp_code, 'reset_password'));
+    } catch (smsErr) {
+      console.error('Failed to send reset SMS:', smsErr.message);
     }
   }
 
   // Same generic response whether or not the account exists
-  res.json({ message: 'If an account exists for this email, a reset code has been sent.' });
+  res.json({ message: 'If an account exists for this email, a reset code has been sent to the phone on file.' });
 });
 
 // POST /api/auth/reset-password - verifies the OTP and sets a new password
@@ -195,7 +198,7 @@ router.post('/reset-password', async (req, res) => {
   res.json({ message: 'Password reset successfully. You can now log in.' });
 });
 
-// POST /api/auth/login - works for both users and admins; requires a verified email
+// POST /api/auth/login - works for both users and admins; requires a verified phone
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) {
@@ -204,7 +207,7 @@ router.post('/login', async (req, res) => {
 
   const { data: user, error } = await supabase
     .from('users')
-    .select('id, email, password_hash, full_name, role, email_verified')
+    .select('id, email, password_hash, full_name, role, phone_verified')
     .eq('email', email)
     .maybeSingle();
 
@@ -217,9 +220,9 @@ router.post('/login', async (req, res) => {
     return res.status(401).json({ error: 'Invalid email or password' });
   }
 
-  if (!user.email_verified) {
+  if (!user.phone_verified) {
     return res.status(403).json({
-      error: 'Please verify your email before logging in.',
+      error: 'Please verify your phone number before logging in.',
       needsVerification: true,
       email: user.email
     });

@@ -43,7 +43,7 @@
         Auth.setSession(token, user);
         window.location.href = user.role === 'admin' ? 'admin/dashboard.html' : 'matches.html';
       } catch (err) {
-        if (err.message.includes('verify your email')) {
+        if (err.needsVerification) {
           window.location.href = `verify-email.html?email=${encodeURIComponent(email)}`;
           return;
         }

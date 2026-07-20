@@ -44,7 +44,11 @@ async function apiRequest(path, { method = 'GET', body = null, isFormData = fals
   const data = await res.json().catch(() => ({}));
 
   if (!res.ok) {
-    throw new Error(data.error || `Request failed (${res.status})`);
+    const err = new Error(data.error || `Request failed (${res.status})`);
+    // Attach any extra structured fields the backend sent (e.g. needsVerification,
+    // email) so callers can branch on them directly instead of matching message text.
+    Object.assign(err, data);
+    throw err;
   }
   return data;
 }
