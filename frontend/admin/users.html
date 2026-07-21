@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Users - Admin</title>
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body class="themed">
+  <script>window.API_BASE_URL = 'https://fantasy-app-backend-znyu.onrender.com/api';</script>
+  <div class="topbar">
+    <h1>Admin Panel</h1>
+    <button id="logoutBtn">Log Out</button>
+  </div>
+  <div class="container">
+    <div class="tab-nav">
+      <a href="dashboard.html">Matches</a>
+      <a href="teams-players.html">Teams &amp; Players</a>
+      <a href="approvals.html">Approvals</a>
+      <a href="users.html" class="active">Users</a>
+    </div>
+
+    <div class="card">
+      <h3>All Users</h3>
+      <p class="match-meta">Reset a user's password here if they've forgotten it — there's no self-service reset flow, so this is the way to get someone back into their account. The new password is shown once; make sure to relay it to them directly.</p>
+      <button class="btn secondary" id="refreshBtn">Refresh</button>
+    </div>
+
+    <div id="usersWrap"><p class="match-meta">Loading...</p></div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script>
+    requireAdminLogin();
+
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      Auth.clearSession();
+      window.location.href = '../login.html';
+    });
+
+    async function loadUsers() {
+      const wrap = document.getElementById('usersWrap');
+      wrap.innerHTML = '<p class="match-meta">Loading...</p>';
+      try {
+        const rows = await Api.listAllUsers();
+        if (rows.length === 0) {
+          wrap.innerHTML = '<div class="card"><p class="match-meta">No users yet.</p></div>';
+          return;
+        }
+        wrap.innerHTML = `
+          <div class="card">
+            <table class="admin-table">
+              <tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th><th></th></tr>
+              ${rows.map(r => `
+                <tr data-id="${r.id}">
+                  <td>${r.full_name}</td>
+                  <td>${r.email}</td>
+                  <td>${r.phone || '-'}</td>
+                  <td>${r.role}</td>
+                  <td>${r.status}</td>
+                  <td><button class="reset-pw-btn" data-id="${r.id}" data-name="${r.full_name}" style="background:none;border:1px solid var(--primary);color:var(--primary);border-radius:6px;padding:4px 10px;cursor:pointer;white-space:nowrap;">Reset Password</button></td>
+                </tr>
+              `).join('')}
+            </table>
+          </div>
+          <div class="card" id="resetResultCard" style="display:none;"></div>
+        `;
+
+        document.querySelectorAll('.reset-pw-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (!confirm(`Reset the password for ${btn.dataset.name}? A new random password will be generated.`)) return;
+            try {
+              const result = await Api.resetUserPassword(btn.dataset.id);
+              const resultCard = document.getElementById('resetResultCard');
+              resultCard.style.display = 'block';
+              resultCard.innerHTML = `
+                <h3>Password Reset ✓</h3>
+                <p>New password for <strong>${result.full_name}</strong> (${result.email}):</p>
+                <p style="font-size:22px; font-weight:700; letter-spacing:1px; background:#f4f6fb; padding:12px; border-radius:8px; text-align:center;">
+                  ${result.new_password}
+                </p>
+                <p class="match-meta">Share this with them directly — it won't be shown again. There's no in-app way for them to change it themselves yet, so let them know to use this as-is for now.</p>
+              `;
+              resultCard.scrollIntoView({ behavior: 'smooth' });
+            } catch (err) {
+              alert('Error: ' + err.message);
+            }
+          });
+        });
+      } catch (err) {
+        wrap.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    }
+
+    document.getElementById('refreshBtn').addEventListener('click', loadUsers);
+    loadUsers();
+  </script>
+</body>
+</html>

@@ -1,5 +1,6 @@
 import express from 'express';
 import multer from 'multer';
+import bcrypt from 'bcryptjs';
 import { parse } from 'csv-parse/sync';
 import { PDFParse } from 'pdf-parse';
 import { supabase } from '../db/supabase.js';
@@ -526,6 +527,37 @@ router.put('/users/:id/reject', async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
+});
+
+// Since there's no self-service forgot-password flow (it depended on the
+// OTP mechanism that's been removed), admin can reset a user's password
+// directly here. If new_password isn't provided, a random one is
+// generated. Either way, the plain password is returned ONCE in the
+// response so admin can relay it to the user - it is never stored or
+// shown again after this.
+router.put('/users/:id/reset-password', async (req, res) => {
+  const { id } = req.params;
+  let { new_password } = req.body;
+
+  if (!new_password) {
+    // Generate a random 10-character password: mix of letters and digits
+    new_password = Math.random().toString(36).slice(-5) + Math.random().toString(36).slice(-5);
+  } else if (new_password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  }
+
+  const password_hash = await bcrypt.hash(new_password, 10);
+
+  const { data, error } = await supabase
+    .from('users')
+    .update({ password_hash })
+    .eq('id', id)
+    .select('id, full_name, email')
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json({ ...data, new_password });
 });
 
 export default router;
