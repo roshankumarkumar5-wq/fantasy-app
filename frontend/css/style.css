@@ -261,8 +261,10 @@ table.admin-table th { background: #eef1f6; }
   gap: 8px;
 }
 .promo-team-logo {
-  width: 64px;
-  height: 64px;
+  width: 70px;
+  height: 70px;
+  object-fit: contain;
+  display: block;
   border-radius: 50%;
   object-fit: cover;
   background: #fff;
