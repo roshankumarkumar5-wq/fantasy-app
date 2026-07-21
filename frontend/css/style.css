@@ -156,16 +156,23 @@ button.btn:disabled { background: #b8c4d9; cursor: not-allowed; }
 .role-tab.active { background: var(--primary); color: white; border-color: var(--primary); }
 
 .player-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 10px 14px;
-  margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    background: rgba(255,255,255,0.75);
+
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: var(--radius);
+
+    padding: 10px 14px;
+    margin-bottom: 8px;
 }
-.player-row.selected { border-color: var(--primary); background: #f0f5ff; }
+.player-row.selected { border-color: var(--primary);
+    background: rgba(240,245,255,0.80);}
 .player-info { display: flex; flex-direction: column; }
 .player-name { font-weight: 600; font-size: 14px; }
 .player-meta { font-size: 12px; color: var(--muted); }
