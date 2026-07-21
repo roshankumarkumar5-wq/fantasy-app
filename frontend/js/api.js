@@ -45,8 +45,8 @@ async function apiRequest(path, { method = 'GET', body = null, isFormData = fals
 
   if (!res.ok) {
     const err = new Error(data.error || `Request failed (${res.status})`);
-    // Attach any extra structured fields the backend sent (e.g. needsVerification,
-    // email) so callers can branch on them directly instead of matching message text.
+    // Attach any extra structured fields the backend sent (e.g. accountStatus)
+    // so callers can branch on them directly instead of matching message text.
     Object.assign(err, data);
     throw err;
   }
@@ -56,10 +56,6 @@ async function apiRequest(path, { method = 'GET', body = null, isFormData = fals
 const Api = {
   signup: (payload) => apiRequest('/auth/signup', { method: 'POST', body: payload }),
   login: (payload) => apiRequest('/auth/login', { method: 'POST', body: payload }),
-  verifyEmail: (payload) => apiRequest('/auth/verify-email', { method: 'POST', body: payload }),
-  resendCode: (payload) => apiRequest('/auth/resend-code', { method: 'POST', body: payload }),
-  forgotPassword: (payload) => apiRequest('/auth/forgot-password', { method: 'POST', body: payload }),
-  resetPassword: (payload) => apiRequest('/auth/reset-password', { method: 'POST', body: payload }),
 
   getMatches: () => apiRequest('/matches'),
   getMatch: (id) => apiRequest(`/matches/${id}`),
@@ -85,7 +81,12 @@ const Api = {
   finalizeMatch: (matchId) => apiRequest(`/admin/matches/${matchId}/finalize`, { method: 'POST' }),
   getLeaderboard: (matchId) => apiRequest(`/admin/matches/${matchId}/leaderboard`),
   deleteMatch: (matchId) => apiRequest(`/admin/matches/${matchId}`, { method: 'DELETE' }),
-  listOtps: () => apiRequest('/admin/users/otp-list')
+
+  // User approvals
+  listPendingUsers: () => apiRequest('/admin/users/pending'),
+  listAllUsers: () => apiRequest('/admin/users'),
+  approveUser: (id) => apiRequest(`/admin/users/${id}/approve`, { method: 'PUT' }),
+  rejectUser: (id) => apiRequest(`/admin/users/${id}/reject`, { method: 'PUT' })
 };
 
 // Redirect to login if not authenticated - call at top of protected pages

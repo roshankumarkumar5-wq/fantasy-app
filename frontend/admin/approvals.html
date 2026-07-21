@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Approvals - Admin</title>
+<link rel="stylesheet" href="../css/style.css">
+</head>
+<body class="themed">
+  <script>window.API_BASE_URL = 'https://fantasy-app-backend-znyu.onrender.com/api';</script>
+  <div class="topbar">
+    <h1>Admin Panel</h1>
+    <button id="logoutBtn">Log Out</button>
+  </div>
+  <div class="container">
+    <div class="tab-nav">
+      <a href="dashboard.html">Matches</a>
+      <a href="teams-players.html">Teams &amp; Players</a>
+      <a href="approvals.html" class="active">Approvals</a>
+    </div>
+
+    <div class="card">
+      <h3>Pending Sign-ups</h3>
+      <p class="match-meta">New accounts can't log in until you approve them here.</p>
+      <button class="btn secondary" id="refreshBtn">Refresh</button>
+    </div>
+
+    <div id="pendingWrap"><p class="match-meta">Loading...</p></div>
+  </div>
+
+  <script src="../js/api.js"></script>
+  <script>
+    requireAdminLogin();
+
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      Auth.clearSession();
+      window.location.href = '../login.html';
+    });
+
+    async function loadPending() {
+      const wrap = document.getElementById('pendingWrap');
+      wrap.innerHTML = '<p class="match-meta">Loading...</p>';
+      try {
+        const rows = await Api.listPendingUsers();
+        if (rows.length === 0) {
+          wrap.innerHTML = '<div class="card"><p class="match-meta">No pending sign-ups right now.</p></div>';
+          return;
+        }
+        wrap.innerHTML = `
+          <div class="card">
+            <table class="admin-table" id="pendingTable">
+              <tr><th>Name</th><th>Email</th><th>Phone</th><th>Signed Up</th><th></th></tr>
+              ${rows.map(r => `
+                <tr data-id="${r.id}">
+                  <td>${r.full_name}</td>
+                  <td>${r.email}</td>
+                  <td>${r.phone || '-'}</td>
+                  <td>${formatIST(r.created_at)}</td>
+                  <td style="white-space:nowrap;">
+                    <button class="approve-btn" data-id="${r.id}" style="color:#16a34a;background:none;border:1px solid #16a34a;border-radius:6px;padding:4px 10px;cursor:pointer;margin-right:4px;">Approve</button>
+                    <button class="reject-btn" data-id="${r.id}" style="color:#dc2626;background:none;border:1px solid #dc2626;border-radius:6px;padding:4px 10px;cursor:pointer;">Reject</button>
+                  </td>
+                </tr>
+              `).join('')}
+            </table>
+          </div>
+        `;
+
+        document.querySelectorAll('.approve-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            try {
+              await Api.approveUser(btn.dataset.id);
+              loadPending();
+            } catch (err) {
+              alert('Error: ' + err.message);
+            }
+          });
+        });
+
+        document.querySelectorAll('.reject-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (!confirm('Reject this account? They will not be able to log in.')) return;
+            try {
+              await Api.rejectUser(btn.dataset.id);
+              loadPending();
+            } catch (err) {
+              alert('Error: ' + err.message);
+            }
+          });
+        });
+      } catch (err) {
+        wrap.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    }
+
+    document.getElementById('refreshBtn').addEventListener('click', loadPending);
+    loadPending();
+  </script>
+</body>
+</html>

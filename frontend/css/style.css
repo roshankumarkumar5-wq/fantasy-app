@@ -12,6 +12,32 @@
   --radius: 10px;
 }
 
+body.themed {
+  background: linear-gradient(rgba(8, 10, 22, 0.72), rgba(8, 10, 22, 0.82)), url('../images/background.jpg') center/cover fixed no-repeat;
+  min-height: 100vh;
+}
+body.themed .topbar {
+  background: rgba(10, 14, 30, 0.55);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+body.themed .tab-nav a {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.15);
+  color: #f4f6fb;
+}
+body.themed .tab-nav a.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+body.themed .link, body.themed .link a {
+  color: #d7e2ff;
+}
+body.themed .link a {
+  font-weight: 600;
+}
+
 * { box-sizing: border-box; }
 
 body {
@@ -197,3 +223,142 @@ table.admin-table th { background: #eef1f6; }
   font-size: 13px;
 }
 .tab-nav a.active { background: var(--primary); color: white; }
+
+/* ============================================================
+   Match promo card - team logos, VS, info boxes
+   ============================================================ */
+.promo-card {
+  background: linear-gradient(160deg, #10131f 0%, #1b2440 60%, #10131f 100%);
+  border-radius: 14px;
+  padding: 20px 16px;
+  margin-bottom: 14px;
+  color: white;
+  cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+}
+.promo-format-tag {
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: #b9c2e0;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+.promo-teams {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.promo-team {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+}
+.promo-team-logo {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #fff;
+  border: 2px solid rgba(255,255,255,0.5);
+}
+.promo-team-logo-fallback {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+  border: 2px solid rgba(255,255,255,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 20px;
+}
+.promo-team-name {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+}
+.promo-vs {
+  font-weight: 800;
+  font-size: 20px;
+  color: #f5b942;
+  padding: 0 4px;
+}
+.promo-info-row {
+  display: flex;
+  gap: 8px;
+}
+.promo-info-box {
+  flex: 1;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  padding: 8px 6px;
+  text-align: center;
+}
+.promo-info-label {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.5px;
+  color: #9aa4c7;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.promo-info-value {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #f4f6fb;
+  line-height: 1.3;
+}
+.promo-status-badge {
+  margin-top: 12px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px;
+  border-radius: 6px;
+}
+.promo-status-upcoming { background: rgba(30,95,217,0.25); color: #9db8ff; }
+.promo-status-locked { background: rgba(245,185,66,0.2); color: #f5b942; }
+.promo-status-completed { background: rgba(22,163,74,0.2); color: #4ade80; }
+
+/* ============================================================
+   Team-select page: pale team-logo watermark behind the player
+   list. Purely decorative - pointer-events disabled so it never
+   interferes with tapping player rows.
+   ============================================================ */
+.player-list-area {
+  position: relative;
+}
+.bg-logo-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  opacity: 0.07;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+.bg-logo-layer img {
+  width: 200px;
+  height: 200px;
+  object-fit: contain;
+  filter: grayscale(20%);
+}
+.player-list-area > #playerList {
+  position: relative;
+  z-index: 1;
+}

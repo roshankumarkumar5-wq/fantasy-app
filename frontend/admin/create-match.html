@@ -6,7 +6,7 @@
 <title>Schedule Match - Admin</title>
 <link rel="stylesheet" href="../css/style.css">
 </head>
-<body>
+<body class="themed">
   <div class="topbar">
     <h1>Schedule Match</h1>
     <button onclick="window.location.href='dashboard.html'">Back</button>
@@ -22,6 +22,12 @@
       <label>Match Date &amp; Time (IST)</label>
       <input type="datetime-local" id="matchDate">
       <p class="match-meta">Enter this in Indian Standard Time. Selection will automatically close 1 hour before this time - no need to set that separately.</p>
+
+      <label>Venue (optional)</label>
+      <input type="text" id="venue" placeholder="e.g. Kabilan Green Field Turf, Chennai">
+
+      <label>Match Format (optional)</label>
+      <input type="text" id="matchFormat" placeholder="e.g. Limited Overs - 35, White Ball">
 
       <label>Special Player System</label>
       <select id="specialEnabled">
@@ -102,7 +108,9 @@
         const match = await Api.createMatch({
           team_a_id: teamAId,
           team_b_id: teamBId,
-          match_date: matchDateUtc
+          match_date: matchDateUtc,
+          venue: document.getElementById('venue').value.trim() || null,
+          match_format: document.getElementById('matchFormat').value.trim() || null
         });
 
         const enabled = document.getElementById('specialEnabled').value === 'true';

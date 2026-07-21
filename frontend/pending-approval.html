@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pending Approval - Fantasy App</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body class="themed">
+  <div class="topbar"><h1>Fantasy League</h1></div>
+  <div class="container">
+    <div class="card">
+      <h2>Almost there!</h2>
+      <p>Your account has been created for <strong id="emailDisplay"></strong>.</p>
+      <p class="match-meta">An admin needs to approve your account before you can log in. Check back in a little while, or reach out to whoever's running this league to let them know you've signed up.</p>
+    </div>
+    <div class="link"><a href="login.html">Back to Log In</a></div>
+  </div>
+
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    document.getElementById('emailDisplay').textContent = params.get('email') || 'your account';
+  </script>
+</body>
+</html>

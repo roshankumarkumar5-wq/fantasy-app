@@ -4,12 +4,35 @@ import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
+// This app has no persistent background scheduler (no cron job running
+// separately from requests), so "lock the match once its deadline passes"
+// is done lazily: every time matches are read (list or detail), any
+// still-"upcoming" match whose deadline has passed gets flipped to
+// "locked" right then, before being returned. This keeps the stored
+// status accurate for anyone viewing it, without needing extra infra.
+async function autoLockExpiredMatches() {
+  try {
+    await supabase
+      .from('matches')
+      .update({ status: 'locked' })
+      .eq('status', 'upcoming')
+      .lt('selection_deadline', new Date().toISOString());
+  } catch (err) {
+    // Non-fatal - worst case, a match stays "upcoming" in the UI a little
+    // longer, but the deadline check in fantasy-teams submission still
+    // blocks late entries regardless of this flag.
+    console.error('autoLockExpiredMatches failed (non-fatal):', err.message);
+  }
+}
+
 // GET /api/matches - list all matches (upcoming first)
 router.get('/', requireAuth, async (req, res) => {
+  await autoLockExpiredMatches();
+
   const { data, error } = await supabase
     .from('matches')
     .select(`
-      id, match_date, selection_deadline, squad_size, status,
+      id, match_date, selection_deadline, squad_size, status, venue, match_format,
       team_a:team_a_id ( id, name, short_code, logo_url ),
       team_b:team_b_id ( id, name, short_code, logo_url )
     `)
@@ -23,11 +46,12 @@ router.get('/', requireAuth, async (req, res) => {
 // the two real teams playing) and special-player rules
 router.get('/:id', requireAuth, async (req, res) => {
   const { id } = req.params;
+  await autoLockExpiredMatches();
 
   const { data: match, error: matchErr } = await supabase
     .from('matches')
     .select(`
-      id, match_date, selection_deadline, squad_size, status, scoresheet_url,
+      id, match_date, selection_deadline, squad_size, status, venue, match_format, scoresheet_url,
       team_a:team_a_id ( id, name, short_code, logo_url ),
       team_b:team_b_id ( id, name, short_code, logo_url )
     `)

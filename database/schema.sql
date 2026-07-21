@@ -15,10 +15,7 @@ create table users (
   full_name text not null,
   phone text,
   role text not null default 'user' check (role in ('user', 'admin')),
-  phone_verified boolean not null default false,
-  otp_code text,
-  otp_expires_at timestamptz,
-  otp_purpose text,   -- 'verify_phone' or 'reset_password'
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
   created_at timestamptz default now()
 );
 
@@ -57,6 +54,8 @@ create table matches (
   selection_deadline timestamptz not null,  -- auto-calculated as 1hr before match_date
   squad_size int not null default 11,
   status text not null default 'upcoming' check (status in ('upcoming', 'locked', 'completed')),
+  venue text,
+  match_format text,   -- free text, e.g. "Limited Overs - 35, White Ball"
   scoresheet_url text,   -- final PDF scoresheet uploaded by admin, for reference
   stats_confirmed_at timestamptz,  -- set when admin saves/uploads final stats; gates finalize
   created_at timestamptz default now()

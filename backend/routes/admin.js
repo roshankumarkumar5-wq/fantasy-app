@@ -108,11 +108,12 @@ router.delete('/players/:id', async (req, res) => {
 });
 
 // ---------- MATCHES ----------
-// body: { team_a_id, team_b_id, match_date }
+// body: { team_a_id, team_b_id, match_date, venue, match_format }
 // squad_size is fixed at 11. selection_deadline is always calculated
 // automatically as 1 hour before match_date - not settable by the admin.
+// venue and match_format are optional free text, shown on the match card.
 router.post('/matches', async (req, res) => {
-  const { team_a_id, team_b_id, match_date } = req.body;
+  const { team_a_id, team_b_id, match_date, venue, match_format } = req.body;
 
   if (!team_a_id || !team_b_id || !match_date) {
     return res.status(400).json({ error: 'team_a_id, team_b_id, and match_date are required' });
@@ -130,7 +131,9 @@ router.post('/matches', async (req, res) => {
       team_a_id, team_b_id,
       match_date: matchDate.toISOString(),
       selection_deadline: selectionDeadline.toISOString(),
-      squad_size: 11
+      squad_size: 11,
+      venue: venue || null,
+      match_format: match_format || null
     })
     .select()
     .single();
@@ -474,35 +477,55 @@ router.delete('/matches/:id', async (req, res) => {
   res.json({ success: true });
 });
 
-// ---------- OTP LIST (testing tool) ----------
-// Lists every user who currently has a pending OTP - useful for testing
-// signup/login/reset flows end-to-end before you've connected a real SMS
-// provider in backend/utils/sms.js.
-// NOTE: this is a deliberate testing convenience. Once real users are
-// relying on this app with a real SMS provider connected, consider
-// removing or restricting this endpoint further, since it exposes live
-// verification codes (even though only to authenticated admins).
-router.get('/users/otp-list', async (req, res) => {
+// ---------- USER APPROVALS ----------
+// New signups start as 'pending' and can't log in until an admin approves
+// them - replaces the old OTP/email-verification concept entirely.
+router.get('/users/pending', async (req, res) => {
   const { data, error } = await supabase
     .from('users')
-    .select('full_name, email, phone, otp_code, otp_purpose, otp_expires_at')
-    .not('otp_code', 'is', null)
-    .order('otp_expires_at', { ascending: false });
+    .select('id, full_name, email, phone, created_at, status')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true });
 
   if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
 
-  const now = new Date();
-  const rows = data.map(u => ({
-    full_name: u.full_name,
-    email: u.email,
-    phone: u.phone,
-    otp_code: u.otp_code,
-    otp_purpose: u.otp_purpose,
-    otp_expires_at: u.otp_expires_at,
-    is_expired: now > new Date(u.otp_expires_at)
-  }));
+// Optional: full list of all non-pending users too, useful for management
+router.get('/users', async (req, res) => {
+  const { data, error } = await supabase
+    .from('users')
+    .select('id, full_name, email, phone, role, status, created_at')
+    .order('created_at', { ascending: false });
 
-  res.json(rows);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+router.put('/users/:id/approve', async (req, res) => {
+  const { id } = req.params;
+  const { data, error } = await supabase
+    .from('users')
+    .update({ status: 'approved' })
+    .eq('id', id)
+    .select('id, full_name, email, status')
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+router.put('/users/:id/reject', async (req, res) => {
+  const { id } = req.params;
+  const { data, error } = await supabase
+    .from('users')
+    .update({ status: 'rejected' })
+    .eq('id', id)
+    .select('id, full_name, email, status')
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
 });
 
 export default router;

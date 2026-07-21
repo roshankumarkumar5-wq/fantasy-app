@@ -6,7 +6,7 @@
 <title>Admin Dashboard</title>
 <link rel="stylesheet" href="../css/style.css">
 </head>
-<body>
+<body class="themed">
   <div class="topbar">
     <h1>Admin Panel</h1>
     <button id="logoutBtn">Log Out</button>
@@ -15,7 +15,7 @@
     <div class="tab-nav">
       <a href="dashboard.html" class="active">Matches</a>
       <a href="teams-players.html">Teams &amp; Players</a>
-      <a href="otp-lookup.html">OTP Lookup</a>
+      <a href="approvals.html">Approvals</a>
     </div>
 
     <div class="card">
@@ -36,6 +36,13 @@
       window.location.href = '../login.html';
     });
 
+    function teamLogo(team) {
+      if (team?.logo_url) {
+        return `<img src="${team.logo_url}" class="promo-team-logo" alt="${team.short_code || team.name}">`;
+      }
+      return `<div class="promo-team-logo-fallback">${(team?.short_code || '?').slice(0, 3)}</div>`;
+    }
+
     async function loadMatches() {
       const container = document.getElementById('matchList');
       try {
@@ -45,18 +52,35 @@
           return;
         }
         container.innerHTML = matches.map(m => `
-          <div class="card match-card" data-match-id="${m.id}">
-            <div class="match-teams">
-              <span>${m.team_a?.short_code || '?'}</span>
-              <span style="color:#9ca3af; font-weight:400;">vs</span>
-              <span>${m.team_b?.short_code || '?'}</span>
+          <div class="promo-card" data-match-id="${m.id}">
+            ${m.match_format ? `<div class="promo-format-tag">${m.match_format}</div>` : ''}
+            <div class="promo-teams">
+              <div class="promo-team">
+                ${teamLogo(m.team_a)}
+                <span class="promo-team-name">${m.team_a?.name || m.team_a?.short_code || '?'}</span>
+              </div>
+              <span class="promo-vs">VS</span>
+              <div class="promo-team">
+                ${teamLogo(m.team_b)}
+                <span class="promo-team-name">${m.team_b?.name || m.team_b?.short_code || '?'}</span>
+              </div>
             </div>
-            <div class="match-meta">${formatIST(m.match_date)}</div>
-            <span class="status-badge status-${m.status}">${m.status}</span>
+            <div class="promo-info-row">
+              <div class="promo-info-box">
+                <span class="promo-info-label">Date &amp; Time</span>
+                <span class="promo-info-value">${formatIST(m.match_date)}</span>
+              </div>
+              ${m.venue ? `
+              <div class="promo-info-box">
+                <span class="promo-info-label">Venue</span>
+                <span class="promo-info-value">${m.venue}</span>
+              </div>` : ''}
+            </div>
+            <div class="promo-status-badge promo-status-${m.status}">${m.status}</div>
           </div>
         `).join('');
 
-        document.querySelectorAll('.match-card').forEach(card => {
+        document.querySelectorAll('.promo-card').forEach(card => {
           card.addEventListener('click', () => {
             window.location.href = `match-detail.html?matchId=${card.dataset.matchId}`;
           });

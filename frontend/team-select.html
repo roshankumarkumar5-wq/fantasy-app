@@ -13,8 +13,11 @@
   </div>
   <div class="credit-bar" id="countsBar" style="display:none;"></div>
   <div class="role-tabs" id="teamTabs"></div>
-  <div class="container" id="playerList">
-    <p>Loading...</p>
+  <div class="player-list-area">
+    <div class="bg-logo-layer" id="bgLogoLayer"></div>
+    <div class="container" id="playerList">
+      <p>Loading...</p>
+    </div>
   </div>
 
   <!-- Step 2: special player selection, hidden until squad is full -->
@@ -94,6 +97,26 @@
       });
     }
 
+    function renderBackgroundLogo() {
+      const { match } = matchData;
+      const layer = document.getElementById('bgLogoLayer');
+      if (!layer) return;
+
+      const complete = squadValid();
+      let logos = [];
+
+      if (complete || currentTeamFilter === 'all') {
+        // Squad fully picked, or browsing "All" - show both teams together (match view)
+        logos = [match.team_a.logo_url, match.team_b.logo_url].filter(Boolean);
+      } else if (currentTeamFilter === match.team_a.id) {
+        logos = [match.team_a.logo_url].filter(Boolean);
+      } else if (currentTeamFilter === match.team_b.id) {
+        logos = [match.team_b.logo_url].filter(Boolean);
+      }
+
+      layer.innerHTML = logos.map(url => `<img src="${url}" alt="">`).join('');
+    }
+
     function renderPlayerList() {
       const { match, players } = matchData;
       const filtered = currentTeamFilter === 'all'
@@ -122,6 +145,8 @@
           </div>
         `;
       }).join('');
+
+      renderBackgroundLogo();
 
       document.querySelectorAll('.select-btn').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -182,6 +207,7 @@
       document.getElementById('playerList').style.display = 'none';
       document.getElementById('teamTabs').style.display = 'none';
       document.getElementById('countsBar').style.display = 'none';
+      document.getElementById('bgLogoLayer').style.display = 'none';
       document.getElementById('specialStep').style.display = 'block';
 
       document.getElementById('specialHint').textContent =
