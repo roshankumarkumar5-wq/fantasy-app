@@ -233,7 +233,7 @@ router.post('/matches/:id/scoresheet', upload.single('file'), async (req, res) =
 
     const parsedStats = parseScorecardText(textResult.text);
 
-    const rows = ['player_name,player_id,runs,wickets,catches,stumpings,run_outs'];
+    const rows = ['player_name,player_id,runs,balls_faced,fours,sixes,is_out,wickets,bowled_lbw_wickets,maidens,overs_bowled,runs_conceded,catches,stumpings,run_outs'];
     for (const s of parsedStats) {
       const match = rosterByNormalizedName.get(normalizeName(s.name));
       const displayName = match ? match.name : s.name;
@@ -242,7 +242,7 @@ router.post('/matches/:id/scoresheet', upload.single('file'), async (req, res) =
       else unmatchedNames.push(s.name);
 
       const safeName = displayName.includes(',') ? `"${displayName.replace(/"/g, '""')}"` : displayName;
-      rows.push(`${safeName},${playerId},${s.runs},${s.wickets},${s.catches},${s.stumpings},${s.run_outs}`);
+      rows.push(`${safeName},${playerId},${s.runs},${s.balls_faced},${s.fours},${s.sixes},${s.is_out},${s.wickets},${s.bowled_lbw_wickets},${s.maidens},${s.overs_bowled},${s.runs_conceded},${s.catches},${s.stumpings},${s.run_outs}`);
     }
     csv = rows.join('\n');
   } catch (parseErr) {
@@ -260,29 +260,45 @@ router.post('/matches/:id/scoresheet', upload.single('file'), async (req, res) =
 
 // ---------- STATS ENTRY + POINTS CALCULATION ----------
 // Manual entry path: pick each player from a dropdown and type their stats.
-// body: { stats: [{ player_id, runs, wickets, catches, stumpings, run_outs }] }
+// body: { stats: [{ player_id, runs, balls_faced, fours, sixes, is_out,
+//                    wickets, bowled_lbw_wickets, maidens, overs_bowled,
+//                    runs_conceded, catches, stumpings, run_outs }] }
 router.post('/matches/:id/stats', async (req, res) => {
   const { id } = req.params;
   const { stats } = req.body;
   if (!Array.isArray(stats)) return res.status(400).json({ error: 'stats array is required' });
 
-  const { data: rules, error: rulesErr } = await supabase
-    .from('scoring_rules')
-    .select('*')
-    .eq('id', 1)
-    .single();
-  if (rulesErr) return res.status(500).json({ error: rulesErr.message });
+  const playerIds = stats.map(s => s.player_id).filter(Boolean);
+  const { data: players, error: playersErr } = await supabase
+    .from('players')
+    .select('id, role')
+    .in('id', playerIds);
+  if (playersErr) return res.status(500).json({ error: playersErr.message });
+  const roleById = new Map((players || []).map(p => [p.id, p.role]));
 
-  const rows = stats.map(s => ({
-    match_id: id,
-    player_id: s.player_id,
-    runs: s.runs || 0,
-    wickets: s.wickets || 0,
-    catches: s.catches || 0,
-    stumpings: s.stumpings || 0,
-    run_outs: s.run_outs || 0,
-    base_points: calculateBasePoints(s, rules)
-  }));
+  const rows = stats.map(s => {
+    const statFields = {
+      runs: s.runs || 0,
+      balls_faced: s.balls_faced || 0,
+      fours: s.fours || 0,
+      sixes: s.sixes || 0,
+      is_out: !!s.is_out,
+      wickets: s.wickets || 0,
+      bowled_lbw_wickets: s.bowled_lbw_wickets || 0,
+      maidens: s.maidens || 0,
+      overs_bowled: s.overs_bowled || 0,
+      runs_conceded: s.runs_conceded || 0,
+      catches: s.catches || 0,
+      stumpings: s.stumpings || 0,
+      run_outs: s.run_outs || 0
+    };
+    return {
+      match_id: id,
+      player_id: s.player_id,
+      ...statFields,
+      base_points: calculateBasePoints(statFields, roleById.get(s.player_id))
+    };
+  });
 
   const { error: statsErr } = await supabase
     .from('player_match_stats')
@@ -300,7 +316,9 @@ router.post('/matches/:id/stats', async (req, res) => {
 // (case/punctuation-insensitive), falling back to player_id if the CSV has
 // one filled in. This upload is what gates whether the match can be
 // finalized (see /finalize below) - not per-player completeness checks.
-// CSV columns: player_name, player_id (optional), runs, wickets, catches, stumpings, run_outs
+// CSV columns: player_name, player_id (optional), runs, balls_faced, fours,
+// sixes, is_out (true/false), wickets, bowled_lbw_wickets, maidens,
+// overs_bowled, runs_conceded, catches, stumpings, run_outs
 router.post('/matches/:id/stats/upload-csv', upload.single('file'), async (req, res) => {
   const { id } = req.params;
   if (!req.file) return res.status(400).json({ error: 'A CSV file is required (field name: file)' });
@@ -321,22 +339,21 @@ router.post('/matches/:id/stats/upload-csv', upload.single('file'), async (req, 
 
   const { data: rosterPlayers, error: rosterErr } = await supabase
     .from('players')
-    .select('id, name')
+    .select('id, name, role')
     .in('real_team_id', [matchRow.team_a_id, matchRow.team_b_id]);
   if (rosterErr) return res.status(500).json({ error: rosterErr.message });
 
   const rosterById = new Map((rosterPlayers || []).map(p => [p.id, p]));
   const rosterByNormalizedName = new Map((rosterPlayers || []).map(p => [normalizeName(p.name), p]));
 
-  const { data: rules, error: rulesErr } = await supabase
-    .from('scoring_rules')
-    .select('*')
-    .eq('id', 1)
-    .single();
-  if (rulesErr) return res.status(500).json({ error: rulesErr.message });
-
   const rowsToSave = [];
   const skipped = [];
+
+  const parseBool = (v) => {
+    if (typeof v === 'boolean') return v;
+    if (!v) return false;
+    return ['true', '1', 'yes', 'out'].includes(String(v).trim().toLowerCase());
+  };
 
   for (const r of records) {
     let player = r.player_id ? rosterById.get(r.player_id.trim()) : null;
@@ -350,7 +367,15 @@ router.post('/matches/:id/stats/upload-csv', upload.single('file'), async (req, 
 
     const stats = {
       runs: parseInt(r.runs, 10) || 0,
+      balls_faced: parseInt(r.balls_faced, 10) || 0,
+      fours: parseInt(r.fours, 10) || 0,
+      sixes: parseInt(r.sixes, 10) || 0,
+      is_out: parseBool(r.is_out),
       wickets: parseInt(r.wickets, 10) || 0,
+      bowled_lbw_wickets: parseInt(r.bowled_lbw_wickets, 10) || 0,
+      maidens: parseInt(r.maidens, 10) || 0,
+      overs_bowled: parseFloat(r.overs_bowled) || 0,
+      runs_conceded: parseInt(r.runs_conceded, 10) || 0,
       catches: parseInt(r.catches, 10) || 0,
       stumpings: parseInt(r.stumpings, 10) || 0,
       run_outs: parseInt(r.run_outs, 10) || 0
@@ -360,7 +385,7 @@ router.post('/matches/:id/stats/upload-csv', upload.single('file'), async (req, 
       match_id: id,
       player_id: player.id,
       ...stats,
-      base_points: calculateBasePoints(stats, rules)
+      base_points: calculateBasePoints(stats, player.role)
     });
   }
 

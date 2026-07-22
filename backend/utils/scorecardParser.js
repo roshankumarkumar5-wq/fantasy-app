@@ -1,8 +1,10 @@
 // Parses text extracted from a CricHeroes-style "Summary Scorecard" PDF
-// into per-player aggregated stats. Designed to be tolerant: if a line
-// doesn't match expected patterns, it's skipped rather than crashing -
-// the resulting CSV is always meant to be reviewed/edited by the admin
-// before being used as the official stats source.
+// into per-player aggregated stats, including the extra fields needed for
+// Dream11-style scoring (fours, sixes, balls faced, overs bowled, maidens,
+// runs conceded, bowled/LBW wickets, dismissed/not-out). Designed to be
+// tolerant: if a line doesn't match expected patterns, it's skipped rather
+// than crashing - the resulting CSV is always meant to be reviewed/edited
+// by the admin before being used as the official stats source.
 
 function stripHandednessAndTags(rawName) {
   // Removes trailing "(RHB)"/"(LHB)" and inline tags like "(c)", "(wk)"
@@ -19,7 +21,12 @@ function stripHandednessAndTags(rawName) {
 function getOrCreate(stats, name) {
   const key = name.toLowerCase();
   if (!stats.has(key)) {
-    stats.set(key, { name, runs: 0, wickets: 0, catches: 0, stumpings: 0, run_outs: 0 });
+    stats.set(key, {
+      name,
+      runs: 0, balls_faced: 0, fours: 0, sixes: 0, is_out: false,
+      wickets: 0, bowled_lbw_wickets: 0, maidens: 0, overs_bowled: 0, runs_conceded: 0,
+      catches: 0, stumpings: 0, run_outs: 0
+    });
   }
   return stats.get(key);
 }
@@ -62,10 +69,16 @@ function parseBatsmanLine(line) {
   const m = rest.match(/^(.*?)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)\s+(-?\d+)\s+([\d.]+)\s*$/);
   if (!m) return null;
 
+  const status = m[1].trim();
+
   return {
     nameRaw,
-    status: m[1].trim(),
-    runs: parseInt(m[2], 10)
+    status,
+    runs: parseInt(m[2], 10),
+    balls_faced: parseInt(m[3], 10),
+    fours: parseInt(m[5], 10),
+    sixes: parseInt(m[6], 10),
+    is_out: !/^not\s*out/i.test(status) && !/retired\s*not\s*out/i.test(status)
   };
 }
 
@@ -80,11 +93,22 @@ function parseBowlerLine(line) {
   const numbers = rest.match(/-?\d+(?:\.\d+)?/g);
   if (!numbers || numbers.length < 10) return null;
 
-  // O M R W 0s 4s 6s WD NB Eco - we need R (index 2) and W (index 3)
+  // O M R W 0s 4s 6s WD NB Eco
+  const overs_bowled = parseFloat(numbers[0]);
+  const maidens = parseInt(numbers[1], 10);
+  const runs_conceded = parseInt(numbers[2], 10);
   const wickets = parseInt(numbers[3], 10);
   if (isNaN(wickets)) return null;
 
-  return { nameRaw, wickets };
+  return { nameRaw, overs_bowled, maidens, runs_conceded, wickets };
+}
+
+function creditBowledLbw(stats, rawBowlerName) {
+  if (!rawBowlerName) return;
+  const name = stripHandednessAndTags(rawBowlerName.trim());
+  if (!name) return;
+  const entry = getOrCreate(stats, name);
+  entry.bowled_lbw_wickets += 1;
 }
 
 function creditDismissal(stats, statusText) {
@@ -118,8 +142,21 @@ function creditDismissal(stats, statusText) {
     return;
   }
 
-  // "b <bowler>" (bowled), "lbw b <bowler>", "not out", "retired", etc:
-  // no fielding credit needed.
+  // lbw b <bowler> - counts toward the bowler's bowled/LBW bonus
+  m = text.match(/^lbw\s+b\s+(.+)$/i);
+  if (m) {
+    creditBowledLbw(stats, m[1]);
+    return;
+  }
+
+  // b <bowler> (bowled) - counts toward the bowler's bowled/LBW bonus
+  m = text.match(/^b\s+(.+)$/i);
+  if (m) {
+    creditBowledLbw(stats, m[1]);
+    return;
+  }
+
+  // "not out", "retired", etc: no credit needed either way.
 }
 
 export function parseScorecardText(text) {
@@ -133,6 +170,10 @@ export function parseScorecardText(text) {
       if (cleanName) {
         const entry = getOrCreate(stats, cleanName);
         entry.runs += bat.runs;
+        entry.balls_faced += bat.balls_faced;
+        entry.fours += bat.fours;
+        entry.sixes += bat.sixes;
+        if (bat.is_out) entry.is_out = true;
       }
       creditDismissal(stats, bat.status);
       continue;
@@ -144,6 +185,14 @@ export function parseScorecardText(text) {
       if (cleanName) {
         const entry = getOrCreate(stats, cleanName);
         entry.wickets += bowl.wickets;
+        entry.maidens += bowl.maidens;
+        entry.runs_conceded += bowl.runs_conceded;
+        // Overs bowled uses cricket notation (whole overs + balls, not
+        // decimal) - simple addition of two such values isn't quite right
+        // if a player somehow appears in two spells, but that's rare in
+        // this single-innings-per-team export format, so plain overwrite
+        // (not addition) is safer here to avoid ball-carry errors.
+        entry.overs_bowled = bowl.overs_bowled;
       }
     }
   }

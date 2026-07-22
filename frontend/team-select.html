@@ -7,17 +7,15 @@
 <link rel="stylesheet" href="css/style.css">
 </head>
 <body class="themed">
+  <div class="bg-logo-layer" id="bgLogoLayer"></div>
   <div class="topbar">
     <h1 id="matchTitle">Select Team</h1>
     <button onclick="window.location.href='matches.html'">Back</button>
   </div>
   <div class="credit-bar" id="countsBar" style="display:none;"></div>
   <div class="role-tabs" id="teamTabs"></div>
-  <div class="player-list-area">
-    <div class="bg-logo-layer" id="bgLogoLayer"></div>
-    <div class="container" id="playerList">
-      <p>Loading...</p>
-    </div>
+  <div class="container" id="playerList">
+    <div class="card"><p>Loading...</p></div>
   </div>
 
   <!-- Step 2: special player selection, hidden until squad is full -->
@@ -30,7 +28,7 @@
   </div>
 
   <div class="bottom-bar">
-    <span id="bottomStatus" style="font-size:13px; color:#6b7280;"></span>
+    <span id="bottomStatus" style="font-size:13px;"></span>
     <button class="btn" id="actionBtn" style="width:auto; padding:12px 24px;" disabled>Continue</button>
   </div>
 
@@ -97,6 +95,8 @@
       });
     }
 
+    const LBS_LOGO = 'images/lbs-logo.png';
+
     function renderBackgroundLogo() {
       const { match } = matchData;
       const layer = document.getElementById('bgLogoLayer');
@@ -106,8 +106,8 @@
       let logos = [];
 
       if (complete || currentTeamFilter === 'all') {
-        // Squad fully picked, or browsing "All" - show both teams together (match view)
-        logos = [match.team_a.logo_url, match.team_b.logo_url].filter(Boolean);
+        // Squad fully picked, or browsing "All" - show the overall league logo
+        logos = [LBS_LOGO];
       } else if (currentTeamFilter === match.team_a.id) {
         logos = [match.team_a.logo_url].filter(Boolean);
       } else if (currentTeamFilter === match.team_b.id) {
@@ -207,8 +207,10 @@
       document.getElementById('playerList').style.display = 'none';
       document.getElementById('teamTabs').style.display = 'none';
       document.getElementById('countsBar').style.display = 'none';
-      document.getElementById('bgLogoLayer').style.display = 'none';
       document.getElementById('specialStep').style.display = 'block';
+
+      // Full-page league logo backdrop for the captain/VC step
+      document.getElementById('bgLogoLayer').innerHTML = `<img src="${LBS_LOGO}" alt="">`;
 
       document.getElementById('specialHint').textContent =
         `You can assign up to ${special_rules.multipliers.length} special player(s) from your selected squad. Tap to assign the next available multiplier slot, tap again to remove.`;
@@ -318,7 +320,7 @@
         renderPlayerList();
         updateBottomBar();
       } catch (err) {
-        document.getElementById('playerList').innerHTML = `<p class="error-msg">${err.message}</p>`;
+        document.getElementById('playerList').innerHTML = `<div class="card"><p class="error-msg">${err.message}</p></div>`;
       }
     }
 

@@ -24,7 +24,7 @@
       <a href="create-match.html"><button class="btn">+ Schedule a Match</button></a>
     </div>
 
-    <div id="matchList"><p>Loading matches...</p></div>
+    <div id="matchList"><div class="card"><p>Loading matches...</p></div></div>
   </div>
 
   <script>window.API_BASE_URL = 'https://fantasy-app-backend-znyu.onrender.com/api';</script>
@@ -49,7 +49,7 @@
       try {
         const matches = await Api.getMatches();
         if (matches.length === 0) {
-          container.innerHTML = '<p>No matches yet.</p>';
+          container.innerHTML = '<div class="card"><p>No matches yet.</p></div>';
           return;
         }
         container.innerHTML = matches.map(m => `

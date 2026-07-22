@@ -218,3 +218,32 @@ fantasy-app/
 - **Team logos**: pulled directly from each team's existing `logo_url` field (already part of `real_teams`) — no new upload mechanism needed, just point it at any public image URL (e.g. a raw GitHub content link) the same way you already do for player photos.
 - **Database changes**: `matches.venue` and `matches.match_format` columns added. If you already have a live Supabase project, run `database/migrations/007_venue_and_format.sql`.
 - **New file**: `frontend/images/background.jpg` — make sure this actually gets committed and pushed (some `.gitignore` templates exclude image folders by mistake; double check it shows up in your GitHub repo after pushing).
+
+## 16. What changed in this update (Dream11-style scoring)
+
+Points calculation was rewritten to match a standard Dream11/My11Circle-style scoring structure, based on screenshots the person running this app provided. It's hardcoded in `backend/utils/points.js` (not admin-editable via the database anymore, given how many rules are involved) — adjust the constants at the top of that file if you want different values.
+
+**Batting**: +1/run, +1 bonus per four, +2 bonus per six, milestone bonus (highest tier only: +4 at 25 runs, +8 at 50, +12 at 75, +16 at a century), -2 duck penalty (batsmen/all-rounders only, when out for 0), strike-rate bonus (min 10 balls faced): +6 at SR ≥170 down to -6 at SR ≤60, linear in between.
+
+**Bowling**: +25/wicket (excludes run-outs), milestone bonus (highest tier only: +8 for 3 wickets, +16 for 4, +25 for 5), +8 per bowled/LBW dismissal, +12 per maiden over, economy-rate bonus (min 2 overs bowled): +6 at economy ≤5.00 down to -6 at economy ≥11.00, linear in between.
+
+**Fielding**: +8 each for a catch, stumping, or direct-hit run-out.
+
+**Captain/Vice-Captain**: unchanged — already handled by the existing special-player multiplier system (defaults to 2x/1.5x).
+
+**Two things worth knowing:**
+- The screenshots only gave the two extreme values for the economy-rate and strike-rate bonuses (e.g. "+6 under 5.00, -6 above 11.00"), not the exact intermediate steps real Dream11 uses. I implemented a straight linear scale between those two points rather than guessing at discrete tiers — if you have an exact tier table you want to match instead, that logic is isolated in `economyRatePoints()`/`strikeRatePoints()` in `points.js`.
+- Whether batting/bowling milestone bonuses stack (get all of +4, +8, +12, +16 for a century) or only the highest one applies was ambiguous from the screenshot. I implemented **highest-tier-only** (a century gets +16, not +40), since that's the more common real-world convention — flip `battingMilestoneBonus()`/`bowlingMilestoneBonus()` in `points.js` if you actually want them to stack.
+
+**New stat fields** needed to support this — `player_match_stats` gained `balls_faced`, `fours`, `sixes`, `is_out`, `bowled_lbw_wickets`, `maidens`, `overs_bowled`, `runs_conceded`. The manual stats-entry form on the match detail page is now grouped into Batting/Bowling/Fielding sections to match. The PDF scorecard parser (`scorecardParser.js`) was extended to extract all of these automatically from a CricHeroes-style export, including the bowled/LBW split — re-verified against the same real match sample used to build the original parser, all values checked out correctly by hand.
+
+**Database changes**: several new columns on `player_match_stats` (see above). If you already have a live Supabase project, run `database/migrations/008_dream11_style_scoring.sql`. The old `scoring_rules` table is no longer used but hasn't been dropped — harmless to leave in place.
+
+## 17. What changed in this update (full visual pass — glass cards, full-page watermark, consistent theming everywhere)
+
+- **Every page is now themed** — the dark stadium-photo backdrop now covers the matches list, team-select, and results pages too, not just login/admin. Ran a full audit and fixed a few spots where loading/empty-state text would've been unreadable (dark text with no card behind it, sitting directly on the new dark background) by wrapping them in a `.card` like everywhere else.
+- **Team-select background watermark** is now a full-page fixed layer (covers the whole viewport, not just the area behind the player list) at 50% opacity (up from 7%) — matches your CSS changes.
+- **Glass-style player cards** — adopted your frosted/translucent player-row styling (semi-transparent white + blur), tuned so the selected state (brighter tint + colored border/glow) stays clearly distinct from unselected.
+- **LBS logo added** (`frontend/images/lbs-logo.png`) as the background watermark for: the "All" tab, once a full squad is selected, and the entire Captain/Vice-Captain selection step. Team-specific tabs (Team A / Team B) still show that team's own logo, unchanged.
+- **New/replaced image**: `frontend/images/background.jpg` was swapped for your new version.
+- **Note on genericity**: hardcoding the LBS logo path into `team-select.html` (rather than pulling it from the database like team logos do) makes this specific view tied to your league's branding specifically — reasonable since this is your own private app, but worth knowing if you ever want to reuse this codebase for a different league, since that one logo path would need updating in code rather than through the admin panel.

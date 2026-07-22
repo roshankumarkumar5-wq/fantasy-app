@@ -110,11 +110,19 @@ create table player_match_stats (
   match_id uuid references matches(id) on delete cascade,
   player_id uuid references players(id) on delete restrict,
   runs int default 0,
+  balls_faced int default 0,
+  fours int default 0,
+  sixes int default 0,
+  is_out boolean default false,        -- true = dismissed, false = not out (for duck penalty)
   wickets int default 0,
+  bowled_lbw_wickets int default 0,    -- subset of wickets taken via bowled/LBW
+  maidens int default 0,
+  overs_bowled numeric(4,1) default 0, -- cricket notation, e.g. 3.4 = 3 overs 4 balls
+  runs_conceded int default 0,
   catches int default 0,
   stumpings int default 0,
   run_outs int default 0,
-  base_points numeric(6,1) default 0,   -- calculated from scoring_rules
+  base_points numeric(6,1) default 0,   -- calculated per the Dream11-style formula in utils/points.js
   unique(match_id, player_id)
 );
 

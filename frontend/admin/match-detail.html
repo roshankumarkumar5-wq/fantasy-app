@@ -34,7 +34,7 @@
 
     <div class="card">
       <h3>3. Upload Final Stats CSV</h3>
-      <p class="match-meta">Upload the CSV — either the one generated in step 2 (edited/corrected), or one you build yourself. Columns: <code>player_name, player_id, runs, wickets, catches, stumpings, run_outs</code> (player_id is optional — matching is done by name). This is what unlocks the Finalize step below.</p>
+      <p class="match-meta">Upload the CSV — either the one generated in step 2 (edited/corrected), or one you build yourself. Columns: <code>player_name, player_id, runs, balls_faced, fours, sixes, is_out, wickets, bowled_lbw_wickets, maidens, overs_bowled, runs_conceded, catches, stumpings, run_outs</code> (player_id is optional — matching is done by name; is_out should be <code>true</code> or <code>false</code>; overs_bowled uses cricket notation e.g. 3.4 = 3 overs and 4 balls). This is what unlocks the Finalize step below.</p>
       <input type="file" id="statsCsvFile" accept=".csv">
       <button class="btn" id="uploadStatsCsvBtn">Upload Stats CSV</button>
       <div id="statsCsvMsg"></div>
@@ -220,15 +220,38 @@
       row.innerHTML = `
         <label>Player</label>
         <select class="stat-player-select"></select>
+
+        <p class="match-meta" style="margin:12px 0 2px; font-weight:700;">Batting</p>
         <label>Runs</label>
         <input type="number" class="stat-runs" value="0">
+        <label>Balls Faced</label>
+        <input type="number" class="stat-balls" value="0">
+        <label>Fours</label>
+        <input type="number" class="stat-fours" value="0">
+        <label>Sixes</label>
+        <input type="number" class="stat-sixes" value="0">
+        <label style="display:flex; align-items:center; gap:8px; font-weight:400;">
+          <input type="checkbox" class="stat-is-out" style="width:auto;"> Was dismissed (uncheck if not out / didn't bat)
+        </label>
+
+        <p class="match-meta" style="margin:12px 0 2px; font-weight:700;">Bowling</p>
         <label>Wickets</label>
         <input type="number" class="stat-wickets" value="0">
+        <label>Bowled / LBW Wickets</label>
+        <input type="number" class="stat-bowled-lbw" value="0">
+        <label>Maidens</label>
+        <input type="number" class="stat-maidens" value="0">
+        <label>Overs Bowled (e.g. 3.4 = 3 overs 4 balls)</label>
+        <input type="number" step="0.1" class="stat-overs" value="0">
+        <label>Runs Conceded</label>
+        <input type="number" class="stat-conceded" value="0">
+
+        <p class="match-meta" style="margin:12px 0 2px; font-weight:700;">Fielding</p>
         <label>Catches</label>
         <input type="number" class="stat-catches" value="0">
         <label>Stumpings</label>
         <input type="number" class="stat-stumpings" value="0">
-        <label>Run Outs</label>
+        <label>Run Outs (direct hit)</label>
         <input type="number" class="stat-runouts" value="0">
       `;
       document.getElementById('statsRows').appendChild(row);
@@ -243,7 +266,15 @@
       const stats = Array.from(rows).map(row => ({
         player_id: row.querySelector('.stat-player-select').value,
         runs: parseInt(row.querySelector('.stat-runs').value) || 0,
+        balls_faced: parseInt(row.querySelector('.stat-balls').value) || 0,
+        fours: parseInt(row.querySelector('.stat-fours').value) || 0,
+        sixes: parseInt(row.querySelector('.stat-sixes').value) || 0,
+        is_out: row.querySelector('.stat-is-out').checked,
         wickets: parseInt(row.querySelector('.stat-wickets').value) || 0,
+        bowled_lbw_wickets: parseInt(row.querySelector('.stat-bowled-lbw').value) || 0,
+        maidens: parseInt(row.querySelector('.stat-maidens').value) || 0,
+        overs_bowled: parseFloat(row.querySelector('.stat-overs').value) || 0,
+        runs_conceded: parseInt(row.querySelector('.stat-conceded').value) || 0,
         catches: parseInt(row.querySelector('.stat-catches').value) || 0,
         stumpings: parseInt(row.querySelector('.stat-stumpings').value) || 0,
         run_outs: parseInt(row.querySelector('.stat-runouts').value) || 0

@@ -6,13 +6,13 @@
 <title>Matches - Fantasy App</title>
 <link rel="stylesheet" href="css/style.css">
 </head>
-<body>
+<body class="themed">
   <div class="topbar">
     <h1>Matches</h1>
     <button id="logoutBtn">Log Out</button>
   </div>
   <div class="container" id="matchList">
-    <p>Loading matches...</p>
+    <div class="card"><p>Loading matches...</p></div>
   </div>
 
   <script>window.API_BASE_URL = 'https://fantasy-app-backend-znyu.onrender.com/api';</script>
@@ -41,7 +41,7 @@
       try {
         const matches = await Api.getMatches();
         if (matches.length === 0) {
-          container.innerHTML = '<p>No matches scheduled yet.</p>';
+          container.innerHTML = '<div class="card"><p>No matches scheduled yet.</p></div>';
           return;
         }
         container.innerHTML = matches.map(m => {
@@ -85,7 +85,7 @@
           });
         });
       } catch (err) {
-        container.innerHTML = `<p class="error-msg">${err.message}</p>`;
+        container.innerHTML = `<div class="card"><p class="error-msg">${err.message}</p></div>`;
       }
     }
 
