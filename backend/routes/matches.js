@@ -66,12 +66,18 @@ router.get('/:id', requireAuth, async (req, res) => {
     .eq('match_id', id)
     .maybeSingle();
 
+  const { data: creditRules } = await supabase
+    .from('match_credit_rules')
+    .select('enabled, max_credits')
+    .eq('match_id', id)
+    .maybeSingle();
+
   // Players are automatically every player belonging to either of the two
   // real teams playing this match - no separate pool to manage.
   const teamIds = [match.team_a.id, match.team_b.id];
   const { data: players, error: playersErr } = await supabase
     .from('players')
-    .select('id, name, role, photo_url, real_team_id')
+    .select('id, name, role, photo_url, real_team_id, credit_value')
     .in('real_team_id', teamIds);
 
   if (playersErr) return res.status(500).json({ error: playersErr.message });
@@ -79,6 +85,7 @@ router.get('/:id', requireAuth, async (req, res) => {
   res.json({
     match,
     special_rules: specialRules || { enabled: false, multipliers: [] },
+    credit_rules: creditRules || { enabled: false, max_credits: null },
     players
   });
 });

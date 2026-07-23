@@ -112,6 +112,7 @@
           ${m.venue ? `<p class="match-meta">Venue: ${m.venue}</p>` : ''}
           ${m.match_format ? `<p class="match-meta">Format: ${m.match_format}</p>` : ''}
           <p class="match-meta">Special players: ${data.special_rules.enabled ? 'Enabled (' + data.special_rules.multipliers.join('x, ') + 'x)' : 'Disabled'}</p>
+          <p class="match-meta">Credit limit: ${data.credit_rules?.enabled ? 'Enabled (max ' + Number(data.credit_rules.max_credits).toFixed(1) + ')' : 'Disabled'}</p>
           <span class="status-badge status-${m.status}">${m.status}</span>
           <p class="match-meta" style="margin-top:8px;">${data.players.length} player(s) available (auto-derived from both teams' rosters)</p>
           <p class="match-meta">Final stats: ${m.stats_confirmed_at ? '<span class="success-msg" style="display:inline">Confirmed ✓ (' + formatIST(m.stats_confirmed_at) + ')</span>' : 'Not yet saved/uploaded'}</p>

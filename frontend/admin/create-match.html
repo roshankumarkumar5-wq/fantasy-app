@@ -38,6 +38,16 @@
       <label>Multipliers (comma-separated, e.g. "2,1.5" for Captain + Vice-Captain, or just "2" for Captain only)</label>
       <input type="text" id="multipliers" value="2,1.5">
 
+      <label>Credit-Based Selection</label>
+      <select id="creditsEnabled">
+        <option value="false">Disabled</option>
+        <option value="true">Enabled</option>
+      </select>
+
+      <label>Max Credits (only used if enabled above)</label>
+      <input type="number" step="0.5" id="maxCredits" placeholder="e.g. 100">
+      <p class="match-meta">Each player's own credit value is set on the Teams &amp; Players page. This just sets the total budget for this match, and whether the limit applies at all.</p>
+
       <p class="match-meta">Squad size is fixed at 11: between 4 and 7 players from each team.</p>
 
       <button class="btn" id="createBtn">Create Match</button>
@@ -100,6 +110,13 @@
         return;
       }
 
+      const creditsEnabled = document.getElementById('creditsEnabled').value === 'true';
+      const maxCreditsRaw = document.getElementById('maxCredits').value;
+      if (creditsEnabled && !maxCreditsRaw) {
+        msg.innerHTML = '<p class="error-msg">Enter a max credits value, or disable credit-based selection</p>';
+        return;
+      }
+
       try {
         // Convert the entered wall-clock time (intended as IST) into the
         // correct absolute UTC instant, regardless of this browser's own timezone.
@@ -120,6 +137,11 @@
           .filter(n => !isNaN(n));
 
         await Api.setSpecialRules(match.id, { enabled, multipliers });
+
+        await Api.setCreditRules(match.id, {
+          enabled: creditsEnabled,
+          max_credits: creditsEnabled ? parseFloat(maxCreditsRaw) : 100
+        });
 
         createdMatchId = match.id;
         document.getElementById('nextStepsCard').style.display = 'block';

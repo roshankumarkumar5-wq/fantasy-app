@@ -66,7 +66,8 @@ router.post('/players/upload-csv', upload.single('file'), async (req, res) => {
     name: r.name,
     real_team_id: r.real_team_id,
     role: r.role,
-    photo_url: r.photo_url || null
+    photo_url: r.photo_url || null,
+    credit_value: r.credit_value ? parseFloat(r.credit_value) : 8.0
   }));
 
   const { data, error } = await supabase.from('players').insert(rows).select();
@@ -75,10 +76,10 @@ router.post('/players/upload-csv', upload.single('file'), async (req, res) => {
 });
 
 router.post('/players', async (req, res) => {
-  const { name, real_team_id, role, photo_url } = req.body;
+  const { name, real_team_id, role, photo_url, credit_value } = req.body;
   const { data, error } = await supabase
     .from('players')
-    .insert({ name, real_team_id, role, photo_url })
+    .insert({ name, real_team_id, role, photo_url, credit_value: credit_value || 8.0 })
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });
@@ -88,7 +89,7 @@ router.post('/players', async (req, res) => {
 router.get('/players', async (req, res) => {
   const { data, error } = await supabase
     .from('players')
-    .select(`id, name, role, photo_url, real_team:real_team_id ( id, name, short_code )`)
+    .select(`id, name, role, photo_url, credit_value, real_team:real_team_id ( id, name, short_code )`)
     .order('name', { ascending: true });
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
@@ -113,6 +114,8 @@ router.delete('/players/:id', async (req, res) => {
 // squad_size is fixed at 11. selection_deadline is always calculated
 // automatically as 1 hour before match_date - not settable by the admin.
 // venue and match_format are optional free text, shown on the match card.
+// Credit rules (like special-player rules) are set via a separate call to
+// PUT /matches/:id/credit-rules right after creation.
 router.post('/matches', async (req, res) => {
   const { team_a_id, team_b_id, match_date, venue, match_format } = req.body;
 
@@ -149,6 +152,24 @@ router.put('/matches/:id/special-rules', async (req, res) => {
   const { data, error } = await supabase
     .from('match_special_rules')
     .upsert({ match_id: id, enabled, multipliers }, { onConflict: 'match_id' })
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+// body: { enabled: true/false, max_credits: 100 }
+router.put('/matches/:id/credit-rules', async (req, res) => {
+  const { id } = req.params;
+  const { enabled, max_credits } = req.body;
+
+  if (enabled && !max_credits) {
+    return res.status(400).json({ error: 'max_credits is required when enabling the credit limit' });
+  }
+
+  const { data, error } = await supabase
+    .from('match_credit_rules')
+    .upsert({ match_id: id, enabled: !!enabled, max_credits: max_credits || 100 }, { onConflict: 'match_id' })
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });

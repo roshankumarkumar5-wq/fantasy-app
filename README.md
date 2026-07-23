@@ -247,3 +247,14 @@ Points calculation was rewritten to match a standard Dream11/My11Circle-style sc
 - **LBS logo added** (`frontend/images/lbs-logo.png`) as the background watermark for: the "All" tab, once a full squad is selected, and the entire Captain/Vice-Captain selection step. Team-specific tabs (Team A / Team B) still show that team's own logo, unchanged.
 - **New/replaced image**: `frontend/images/background.jpg` was swapped for your new version.
 - **Note on genericity**: hardcoding the LBS logo path into `team-select.html` (rather than pulling it from the database like team logos do) makes this specific view tied to your league's branding specifically — reasonable since this is your own private app, but worth knowing if you ever want to reuse this codebase for a different league, since that one logo path would need updating in code rather than through the admin panel.
+
+## 18. What changed in this update (credits, re-introduced as configurable)
+
+Credits are back, redesigned to be genuinely configurable per match rather than the old rigid version:
+
+- **Per-player credit value** — set directly on each player (Teams & Players page, single-add form or CSV `credit_value` column), defaults to 8.0 if left blank. One value per player, reused across every match, rather than the old per-match pool entries.
+- **Per-match toggle** — when scheduling a match, "Credit-Based Selection" can be Enabled or Disabled, with a Max Credits budget if enabled. Mirrors exactly how the Special Player (Captain/VC) system already works: a separate `match_credit_rules` row, set right after match creation.
+- **Team-select page** shows a running credit total when enabled for that match, disables picking a player that would blow the budget, and blocks the Continue button with "Over credit limit" until the squad fits — all alongside the existing 4–7-per-team composition rules, not replacing them.
+- **Database changes**: `players.credit_value` column, and a new `match_credit_rules` table (mirrors `match_special_rules`). Run `database/migrations/009_configurable_credits.sql` if you already have a live Supabase project.
+
+**One real bug fixed along the way**: the match-creation endpoint had a leftover line trying to insert `max_credits` directly into the `matches` table — that column doesn't exist (credits live in the separate `match_credit_rules` table), so every match creation would have hit a database error. Removed that dead code; credit rules are correctly set via their own dedicated call right after a match is created, same as special-player rules.

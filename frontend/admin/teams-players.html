@@ -34,7 +34,7 @@
 
     <div class="card">
       <h3>Bulk Upload Players (CSV)</h3>
-      <p class="match-meta">CSV columns required: <code>name, real_team_id, role, photo_url</code> (photo_url optional, e.g. <code>https://i.pravatar.cc/150?img=1</code> as a free placeholder). Role must be one of: batsman, bowler, all-rounder, keeper.</p>
+      <p class="match-meta">CSV columns required: <code>name, real_team_id, role, photo_url, credit_value</code> (photo_url and credit_value optional, e.g. <code>https://i.pravatar.cc/150?img=1</code> as a free placeholder photo, credit_value defaults to 8.0 if left blank). Role must be one of: batsman, bowler, all-rounder, keeper.</p>
       <input type="file" id="csvFile" accept=".csv">
       <button class="btn" id="uploadCsvBtn">Upload CSV</button>
       <div id="csvMsg"></div>
@@ -56,6 +56,9 @@
       <label>Photo URL (optional)</label>
       <input type="text" id="playerPhoto" placeholder="https://i.pravatar.cc/150?img=1">
       <p class="match-meta">Needs to be a public image link. Try <code>https://i.pravatar.cc/150?img=1</code> (change the number for a different face) as a free working placeholder while testing.</p>
+      <label>Credit Value</label>
+      <input type="number" step="0.5" id="playerCredit" placeholder="8.0" value="8.0">
+      <p class="match-meta">Only matters for matches with credit-based selection enabled (set when scheduling a match) — otherwise ignored.</p>
       <button class="btn" id="addPlayerBtn">Add Player</button>
       <div id="playerMsg"></div>
     </div>
@@ -72,7 +75,7 @@
       <h3>Existing Players</h3>
       <div id="playersListMsg"></div>
       <table class="admin-table" id="playersTable">
-        <tr><th>Name</th><th>Team</th><th>Role</th><th></th></tr>
+        <tr><th>Name</th><th>Team</th><th>Role</th><th>Credits</th><th></th></tr>
       </table>
     </div>
   </div>
@@ -124,12 +127,13 @@
       const msgEl = document.getElementById('playersListMsg');
       try {
         const players = await Api.listPlayers();
-        table.innerHTML = '<tr><th>Name</th><th>Team</th><th>Role</th><th></th></tr>' +
+        table.innerHTML = '<tr><th>Name</th><th>Team</th><th>Role</th><th>Credit</th><th></th></tr>' +
           players.map(p => `
             <tr>
               <td>${p.name}</td>
               <td>${p.real_team?.short_code || '-'}</td>
               <td>${p.role}</td>
+              <td>${Number(p.credit_value ?? 8.0).toFixed(1)}</td>
               <td><button class="delete-player-btn" data-id="${p.id}" data-name="${p.name}" style="color:#dc2626;background:none;border:1px solid #dc2626;border-radius:6px;padding:4px 10px;cursor:pointer;">Delete</button></td>
             </tr>
           `).join('');
@@ -213,7 +217,8 @@
           name: document.getElementById('playerName').value.trim(),
           real_team_id,
           role: document.getElementById('playerRole').value,
-          photo_url: document.getElementById('playerPhoto').value.trim() || null
+          photo_url: document.getElementById('playerPhoto').value.trim() || null,
+          credit_value: parseFloat(document.getElementById('playerCredit').value) || 8.0
         });
         msg.innerHTML = `<p class="success-msg">Added player "${player.name}"</p>`;
         loadPlayersList();

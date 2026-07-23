@@ -40,6 +40,7 @@ create table players (
   real_team_id uuid references real_teams(id) on delete cascade,
   role text not null check (role in ('batsman', 'bowler', 'all-rounder', 'keeper')),
   photo_url text,
+  credit_value numeric(4,1) not null default 8.0,
   created_at timestamptz default now()
 );
 
@@ -72,6 +73,16 @@ create table match_special_rules (
   match_id uuid primary key references matches(id) on delete cascade,
   enabled boolean not null default true,
   multipliers numeric(3,1)[] not null default array[2.0, 1.5]
+);
+
+-- ------------------------------------------------------------
+-- CREDIT RULES (per match, admin-configurable)
+-- enabled = false means no credit limit for this match.
+-- ------------------------------------------------------------
+create table match_credit_rules (
+  match_id uuid primary key references matches(id) on delete cascade,
+  enabled boolean not null default true,
+  max_credits numeric(5,1) not null default 100
 );
 
 -- ------------------------------------------------------------

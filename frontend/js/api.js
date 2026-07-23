@@ -74,6 +74,7 @@ const Api = {
   uploadPlayersCsv: (formData) => apiRequest('/admin/players/upload-csv', { method: 'POST', body: formData, isFormData: true }),
   createMatch: (payload) => apiRequest('/admin/matches', { method: 'POST', body: payload }),
   setSpecialRules: (matchId, payload) => apiRequest(`/admin/matches/${matchId}/special-rules`, { method: 'PUT', body: payload }),
+  setCreditRules: (matchId, payload) => apiRequest(`/admin/matches/${matchId}/credit-rules`, { method: 'PUT', body: payload }),
   lockMatch: (matchId) => apiRequest(`/admin/matches/${matchId}/lock`, { method: 'PUT' }),
   uploadScoresheet: (matchId, formData) => apiRequest(`/admin/matches/${matchId}/scoresheet`, { method: 'POST', body: formData, isFormData: true }),
   submitStats: (matchId, payload) => apiRequest(`/admin/matches/${matchId}/stats`, { method: 'POST', body: payload }),

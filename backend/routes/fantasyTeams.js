@@ -70,7 +70,7 @@ router.post('/', requireAuth, async (req, res) => {
   // players picked from each side.
   const { data: pickedPlayers, error: playersErr } = await supabase
     .from('players')
-    .select('id, real_team_id')
+    .select('id, real_team_id, credit_value')
     .in('id', player_ids);
 
   if (playersErr) return res.status(500).json({ error: playersErr.message });
@@ -97,6 +97,22 @@ router.post('/', requireAuth, async (req, res) => {
     return res.status(400).json({
       error: `You selected ${countB} player(s) from Team B - must be between ${MIN_PER_TEAM} and ${MAX_PER_TEAM}`
     });
+  }
+
+  // 4b. Credit budget check - only enforced if this match has it enabled.
+  const { data: creditRules } = await supabase
+    .from('match_credit_rules')
+    .select('enabled, max_credits')
+    .eq('match_id', match_id)
+    .maybeSingle();
+
+  if (creditRules?.enabled) {
+    const totalCredits = pickedPlayers.reduce((sum, p) => sum + Number(p.credit_value), 0);
+    if (totalCredits > Number(creditRules.max_credits)) {
+      return res.status(400).json({
+        error: `Your team uses ${totalCredits.toFixed(1)} credits, which exceeds the ${Number(creditRules.max_credits).toFixed(1)} credit limit for this match`
+      });
+    }
   }
 
   // 5. Upsert user_teams row
