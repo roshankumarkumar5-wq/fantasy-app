@@ -41,6 +41,11 @@
 
     const MIN_PER_TEAM = 4;
     const MAX_PER_TEAM = 7;
+    const MIN_BATTER = 3;
+    const MIN_BOWLER = 3;
+    const MIN_KEEPER = 1;
+    const MIN_ALL = 1;
+
 
     let matchData = null;      // { match, special_rules, players }
     let selectedIds = new Set();
@@ -57,6 +62,15 @@
       for (const id of selectedIds) {
         const p = matchData.players.find(pl => pl.id === id);
         if (p && p.real_team_id === teamId) count++;
+      }
+      return count;
+    }
+
+    function countType(type) {
+      let count = 0;
+      for (const id of selectedIds) {
+        const p = matchData.players.find(pl => pl.id === id);
+        if (p && p.role === type) count++;
       }
       return count;
     }
@@ -181,9 +195,15 @@
       const countA = countForTeam(match.team_a.id);
       const countB = countForTeam(match.team_b.id);
       const creditsOk = !credit_rules?.enabled || creditsUsed() <= Number(credit_rules.max_credits);
+      const countBat = countType("batsman");
+      const countBowl = countType("bowler");      
+      const countKeep = countType("keeper");
+      const countAll = countType("all-rounder");
       return selectedIds.size === match.squad_size &&
         countA >= MIN_PER_TEAM && countA <= MAX_PER_TEAM &&
         countB >= MIN_PER_TEAM && countB <= MAX_PER_TEAM &&
+        countBat >= MIN_BATTER && countBowl >= MIN_BOWLER &&
+        countKeep >= MIN_KEEPER && countAll >= MIN_ALL &&
         creditsOk;
     }
 
