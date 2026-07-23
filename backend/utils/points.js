@@ -19,7 +19,7 @@ const DUCK_PENALTY = -2;        // batter/all-rounder out for 0
 
 const POINTS_PER_WICKET = 25;   // excludes run-outs
 const POINTS_PER_BOWLED_LBW = 8;
-const POINTS_PER_MAIDEN = 12;
+const POINTS_PER_MAIDEN = 8;
 
 const POINTS_PER_FIELDING_DISMISSAL = 8; // catch, stumping, or direct-hit run out (each)
 
@@ -33,8 +33,8 @@ const BATTING_MILESTONES = [
 
 // Bowling milestones - only the HIGHEST tier reached applies (not stacked).
 const BOWLING_MILESTONES = [
-  { wickets: 5, points: 25 },
-  { wickets: 4, points: 16 },
+  { wickets: 5, points: 16 },
+  { wickets: 4, points: 12 },
   { wickets: 3, points: 8 }
 ];
 
@@ -61,10 +61,17 @@ function economyRatePoints(runsConceded, oversBowled) {
   if (decimalOvers < 2) return 0; // minimum 2 overs bowled to qualify
 
   const economy = runsConceded / decimalOvers;
-  if (economy <= 5) return 6;
-  if (economy >= 11) return -6;
-  // Linear interpolation: +6 at economy=5.0 down to -6 at economy=11.0
-  return 6 - ((economy - 5) / (11 - 5)) * 12;
+  if (economy <= 3) return 6;
+  if (economy <= 4) return 5;
+  if (economy <= 5) return 4;
+  if (economy <= 6) return 3;
+  if (economy <= 7) return 2;
+  if (economy <= 8) return 1;
+  if (economy <= 9) return 0;
+  if (economy <= 10) return -2;
+  if (economy <= 11) return -4;
+
+  return -6; // Economy > 11
 }
 
 function strikeRatePoints(runs, ballsFaced) {
@@ -72,9 +79,16 @@ function strikeRatePoints(runs, ballsFaced) {
 
   const strikeRate = (runs / ballsFaced) * 100;
   if (strikeRate >= 170) return 6;
-  if (strikeRate <= 60) return -6;
-  // Linear interpolation: -6 at SR=60 up to +6 at SR=170
-  return -6 + ((strikeRate - 60) / (170 - 60)) * 12;
+  if (strikeRate >= 160) return 5;
+  if (strikeRate >= 150) return 4;
+  if (strikeRate >= 140) return 3;
+  if (strikeRate >= 130) return 2;
+  if (strikeRate >= 120) return 1;
+  if (strikeRate >= 80) return 0;
+  if (strikeRate >= 70) return -2;
+  if (strikeRate >= 60) return -4;
+
+  return -6; // Strike Rate < 60
 }
 
 // stats: { runs, balls_faced, fours, sixes, is_out, wickets, bowled_lbw_wickets,

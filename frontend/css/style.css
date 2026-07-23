@@ -259,7 +259,12 @@ body.team-select-bg .topbar {
   margin-left: 6px;
 }
 
-table.admin-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.admin-table{
+    width:100%;
+    min-width:900px;   /* keeps all columns visible */
+    border-collapse:collapse;
+    table-layout:auto;
+}
 table.admin-table th, table.admin-table td { border: 1px solid var(--border); padding: 8px; text-align: left; }
 table.admin-table th { background: #eef1f6; }
 
