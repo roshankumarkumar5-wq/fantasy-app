@@ -85,18 +85,40 @@
     }
 
     function renderCountsBar() {
-      const { match, credit_rules } = matchData;
-      const countA = countForTeam(match.team_a.id);
-      const countB = countForTeam(match.team_b.id);
-      const bar = document.getElementById('countsBar');
-      bar.style.display = 'flex';
-      bar.innerHTML = `
-        <span>${match.team_a.short_code}: ${countA}/${MAX_PER_TEAM} (min ${MIN_PER_TEAM})</span>
-        <span>${match.team_b.short_code}: ${countB}/${MAX_PER_TEAM} (min ${MIN_PER_TEAM})</span>
-        ${credit_rules?.enabled ? `<span>Credits: ${creditsUsed().toFixed(1)}/${Number(credit_rules.max_credits).toFixed(1)}</span>` : ''}
-        <span>${selectedIds.size}/${match.squad_size} total</span>
-      `;
-    }
+  const { match, credit_rules } = matchData;
+
+  const countA = countForTeam(match.team_a.id);
+  const countB = countForTeam(match.team_b.id);
+
+  const countBat = countType("batsman");
+  const countBowl = countType("bowler");
+  const countKeep = countType("keeper");
+  const countAll = countType("all-rounder");
+
+ const ok = (current, min) =>
+      current >= min
+          ? `<span style="color:#4CAF50">✓ ${current}/${min}</span>`
+          : `<span style="color:#FF5252">✗ ${current}/${min}</span>`;
+
+  const bar = document.getElementById("countsBar");
+  bar.style.display = "flex";
+
+  bar.innerHTML = `
+    <span>${match.team_a.short_code}: ${countA}/${MAX_PER_TEAM} (Min ${MIN_PER_TEAM})</span>
+    <span>${match.team_b.short_code}: ${countB}/${MAX_PER_TEAM} (Min ${MIN_PER_TEAM})</span>
+
+    <span>BAT: ${countBat}/${MIN_BATTER}</span>
+    <span>BOWL: ${countBowl}/${MIN_BOWLER}</span>
+    <span>WK: ${countKeep}/${MIN_KEEPER}</span>
+    <span>AR: ${countAll}/${MIN_ALL}</span>
+
+    ${credit_rules?.enabled
+      ? `<span>Credits: ${creditsUsed().toFixed(1)}/${Number(credit_rules.max_credits).toFixed(1)}</span>`
+      : ""}
+
+    <span>${selectedIds.size}/${match.squad_size}</span>
+  `;
+}
 
     function renderTeamTabs() {
       const { match } = matchData;
