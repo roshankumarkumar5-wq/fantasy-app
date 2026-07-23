@@ -107,10 +107,10 @@
     <span>${match.team_a.short_code}: ${countA}/${MAX_PER_TEAM} (Min ${MIN_PER_TEAM})</span>
     <span>${match.team_b.short_code}: ${countB}/${MAX_PER_TEAM} (Min ${MIN_PER_TEAM})</span>
 
-    <span>BAT: ${countBat}/${MIN_BATTER}</span>
-    <span>BOWL: ${countBowl}/${MIN_BOWLER}</span>
-    <span>WK: ${countKeep}/${MIN_KEEPER}</span>
-    <span>AR: ${countAll}/${MIN_ALL}</span>
+   <span>BAT ${ok(countBat, MIN_BATTER)}</span>
+<span>BOWL ${ok(countBowl, MIN_BOWLER)}</span>
+<span>WK ${ok(countKeep, MIN_KEEPER)}</span>
+<span>AR ${ok(countAll, MIN_ALL)}</span>
 
     ${credit_rules?.enabled
       ? `<span>Credits: ${creditsUsed().toFixed(1)}/${Number(credit_rules.max_credits).toFixed(1)}</span>`
