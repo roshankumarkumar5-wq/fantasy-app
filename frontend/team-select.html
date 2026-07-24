@@ -74,6 +74,14 @@
       }
       return count;
     }
+function countType(type) {
+      let count = 0;
+      for (const id of selectedIds) {
+        const p = matchData.players.find(pl => pl.id === id);
+        if (p && p.role === type) count++;
+      }
+      return count;
+    }
 
     function creditsUsed() {
       let total = 0;
