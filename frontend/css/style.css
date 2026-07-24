@@ -120,7 +120,7 @@ input, select {
   border-radius: 8px;
   font-size: 15px;
 }
-button.btn {
+button.btn:not(.action-btn-inline) {
   width: 100%;
   padding: 12px;
   border: none;
@@ -189,21 +189,33 @@ body.team-select-bg .topbar {
    side by side - frozen right below the team-filter row above it, so the
    action button is always reachable without scrolling. Fully opaque so
    player rows scrolling underneath never show through. */
-.role-tabs-row {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 16px;
-  background: rgba(8,10,20,0.96);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border-bottom: 1px solid rgba(255,255,255,0.1);
+.role-tabs-row{
+    position:sticky;
+    z-index:10;
+
+    display:flex;
+    align-items:center;
+    gap:10px;
+
+    width:100%;          /* <-- Add */
+    box-sizing:border-box;
+
+    padding:10px 16px;
+
+    background:rgba(8,10,20,.96);
 }
-.role-tabs { display: flex; gap: 8px; overflow-x: auto; flex: 1; min-width: 0; }
+.role-tabs{
+    display:flex;
+    flex-grow:1;
+    flex-shrink:1;
+    flex-basis:auto;
+
+    width:100%;          /* <-- Add this */
+    min-width:200px;     /* <-- Add this */
+
+    gap:8px;
+    overflow-x:auto;
+}
 .role-tab {
   padding: 6px 14px;
   border-radius: 20px;
