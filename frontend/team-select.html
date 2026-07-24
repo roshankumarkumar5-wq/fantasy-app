@@ -153,6 +153,7 @@ const ok = (current, min) =>
           currentTeamFilter = el.dataset.team;
           renderPlayerList();
           renderCountsBar();
+updateStickyOffsets();
         });
       });
     }
@@ -236,11 +237,23 @@ const ok = (current, min) =>
             selectedIds.add(id);
           }
           renderCountsBar();
+updateStickyOffsets();
           renderPlayerList();
           updateActionButton();
         });
       });
     }
+
+function updateStickyOffsets() {
+    const topBar = document.querySelector(".topbar");
+    const countsBar = document.getElementById("countsBar");
+    const tabsRow = document.getElementById("tabsRow");
+
+    const topBarHeight = topBar ? topBar.offsetHeight : 56;
+    const countsHeight = countsBar ? countsBar.offsetHeight : 0;
+
+    tabsRow.style.top = `${topBarHeight + countsHeight}px`;
+}
 
     function squadValid() {
       const { match, credit_rules } = matchData;
@@ -406,6 +419,7 @@ const ok = (current, min) =>
         }
 
         renderCountsBar();
+updateStickyOffsets();
         renderRoleTabs();
         renderPlayerList();
         updateActionButton();
