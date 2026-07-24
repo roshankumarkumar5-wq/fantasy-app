@@ -12,11 +12,18 @@
     <h1 id="matchTitle">Select Team</h1>
     <button onclick="window.location.href='matches.html'">Back</button>
   </div>
+
+  <!-- Row 1: clickable team filter pills (All / Team A / Team B), plus
+       credits and total as plain info on the right. Frozen at the top. -->
   <div class="credit-bar" id="countsBar" style="display:none;"></div>
+
+  <!-- Row 2: role filter pills (All / Batsman / Bowler / Keeper / All-rounder)
+       on the left, submit/continue button on the right. Frozen right below row 1. -->
   <div class="role-tabs-row" id="tabsRow">
-    <div class="role-tabs" id="teamTabs"></div>
+    <div class="role-tabs" id="roleTabs"></div>
     <button class="btn action-btn-inline" id="actionBtn" disabled>Continue</button>
   </div>
+
   <div class="container" id="playerList">
     <div class="card"><p>Loading...</p></div>
   </div>
@@ -45,32 +52,25 @@
     const MIN_BOWLER = 3;
     const MIN_KEEPER = 1;
     const MIN_ALL = 1;
-
-
-    let matchData = null;      // { match, special_rules, players }
-    let selectedIds = new Set();
-    let specialAssignments = new Map(); // player_id -> rank
-    let currentTeamFilter = 'all'; // 'all' | team_a.id | team_b.id
-    let step = 1; // 1 = pick squad, 2 = pick special players
-
     const ROLE_LABELS = {
       batsman: 'Batsman', bowler: 'Bowler', 'all-rounder': 'All-Rounder', keeper: 'Wicket-Keeper'
     };
+    const ROLE_FILTER_LABELS = {
+      all: 'All Roles', batsman: 'Batters', bowler: 'Bowlers', keeper: 'Keepers', 'all-rounder': 'All-Rounders'
+    };
+
+    let matchData = null;      // { match, special_rules, credit_rules, players }
+    let selectedIds = new Set();
+    let specialAssignments = new Map(); // player_id -> rank
+    let currentTeamFilter = 'all';  // 'all' | team_a.id | team_b.id
+    let currentRoleFilter = 'all';  // 'all' | 'batsman' | 'bowler' | 'keeper' | 'all-rounder'
+    let step = 1; // 1 = pick squad, 2 = pick special players
 
     function countForTeam(teamId) {
       let count = 0;
       for (const id of selectedIds) {
         const p = matchData.players.find(pl => pl.id === id);
         if (p && p.real_team_id === teamId) count++;
-      }
-      return count;
-    }
-
-    function countType(type) {
-      let count = 0;
-      for (const id of selectedIds) {
-        const p = matchData.players.find(pl => pl.id === id);
-        if (p && p.role === type) count++;
       }
       return count;
     }
@@ -84,66 +84,74 @@
       return total;
     }
 
+    // Row 1: clickable team-filter pills (All / Team A / Team B with live
+    // counts baked into the label) + credits/total as plain info.
     function renderCountsBar() {
-  const { match, credit_rules } = matchData;
-
-  const countA = countForTeam(match.team_a.id);
-  const countB = countForTeam(match.team_b.id);
+      const { match, credit_rules } = matchData;
+      const countA = countForTeam(match.team_a.id);
+      const countB = countForTeam(match.team_b.id);
 
   const countBat = countType("batsman");
   const countBowl = countType("bowler");
   const countKeep = countType("keeper");
   const countAll = countType("all-rounder");
 
- const ok = (current, min) =>
+const ok = (current, min) =>
       current >= min
           ? `<span style="color:#4CAF50">✓ ${current}/${min}</span>`
           : `<span style="color:#FF5252">✗ ${current}/${min}</span>`;
 
-  const bar = document.getElementById("countsBar");
-  bar.style.display = "flex";
+      const bar = document.getElementById('countsBar');
+      bar.style.display = 'flex';
 
-  bar.innerHTML = `
-    <span>${match.team_a.short_code}: ${countA}/${MAX_PER_TEAM} (Min ${MIN_PER_TEAM})</span>
-    <span>${match.team_b.short_code}: ${countB}/${MAX_PER_TEAM} (Min ${MIN_PER_TEAM})</span>
+      const teamPills = [
+        { id: 'all', label: 'All' },
+        { id: match.team_a.id, label: `${match.team_a.short_code}: ${countA}/${MAX_PER_TEAM} (min ${MIN_PER_TEAM})` },
+        { id: match.team_b.id, label: `${match.team_b.short_code}: ${countB}/${MAX_PER_TEAM} (min ${MIN_PER_TEAM})` }
+      ];
 
-   <span>BAT ${ok(countBat, MIN_BATTER)}</span>
-<span>BOWL ${ok(countBowl, MIN_BOWLER)}</span>
-<span>WK ${ok(countKeep, MIN_KEEPER)}</span>
-<span>AR ${ok(countAll, MIN_ALL)}</span>
+      bar.innerHTML = `
+    <span>${match.team_a.short_code} ${ok(countA, MIN_PER_TEAM)} / ${MAX_PER_TEAM}</span>
+<span>${match.team_b.short_code} ${ok(countB, MIN_PER_TEAM)} / ${MAX_PER_TEAM}</span>
+
+    <span>BAT ${ok(countBat, MIN_BATTER)}</span>
+    <span>BOWL ${ok(countBowl, MIN_BOWLER)}</span>
+    <span>WK ${ok(countKeep, MIN_KEEPER)}</span>
+    <span>AR ${ok(countAll, MIN_ALL)}</span>
 
     ${credit_rules?.enabled
       ? `<span>Credits: ${creditsUsed().toFixed(1)}/${Number(credit_rules.max_credits).toFixed(1)}</span>`
       : ""}
 
     <span>${selectedIds.size}/${match.squad_size}</span>
-  `;
-}
+`;
 
-    function renderTeamTabs() {
-      const { match } = matchData;
-      const tabs = [
-        { id: 'all', label: 'All' },
-        { id: match.team_a.id, label: match.team_a.short_code },
-        { id: match.team_b.id, label: match.team_b.short_code }
-      ];
-      document.getElementById('teamTabs').innerHTML = tabs.map(t => `
-        <div class="role-tab ${t.id === currentTeamFilter ? 'active' : ''}" data-team="${t.id}">${t.label}</div>
-      `).join('');
-      document.querySelectorAll('.role-tab').forEach(el => {
+      document.querySelectorAll('#teamFilterPills .role-tab').forEach(el => {
         el.addEventListener('click', () => {
           currentTeamFilter = el.dataset.team;
           renderPlayerList();
-          renderTeamTabs();
+          renderCountsBar();
+        });
+      });
+    }
+
+    // Row 2: clickable role-filter pills.
+    function renderRoleTabs() {
+      const roles = ['all', 'batsman', 'bowler', 'all-rounder', 'keeper'];
+      document.getElementById('roleTabs').innerHTML = roles.map(r => `
+        <div class="role-tab ${r === currentRoleFilter ? 'active' : ''}" data-role="${r}">${ROLE_FILTER_LABELS[r]}</div>
+      `).join('');
+      document.querySelectorAll('#roleTabs .role-tab').forEach(el => {
+        el.addEventListener('click', () => {
+          currentRoleFilter = el.dataset.role;
+          renderPlayerList();
+          renderRoleTabs();
         });
       });
     }
 
     const LBS_LOGO = 'images/lbs-logo.png';
 
-    // Background is dynamic and dedicated (no stadium photo on this page -
-    // just a plain dark backdrop) - respective team logo when that team's
-    // tab is active, LBS logo for "All" or once the squad is complete.
     function renderBackgroundLogo() {
       const { match } = matchData;
       const layer = document.getElementById('bgLogoLayer');
@@ -165,9 +173,10 @@
 
     function renderPlayerList() {
       const { match, players, credit_rules } = matchData;
-      const filtered = currentTeamFilter === 'all'
-        ? players
-        : players.filter(p => p.real_team_id === currentTeamFilter);
+      const filtered = players.filter(p =>
+        (currentTeamFilter === 'all' || p.real_team_id === currentTeamFilter) &&
+        (currentRoleFilter === 'all' || p.role === currentRoleFilter)
+      );
 
       document.getElementById('playerList').innerHTML = filtered.map(p => {
         const isSelected = selectedIds.has(p.id);
@@ -206,7 +215,6 @@
           }
           renderCountsBar();
           renderPlayerList();
-          renderTeamTabs();
           updateActionButton();
         });
       });
@@ -229,8 +237,6 @@
         creditsOk;
     }
 
-    // Status is communicated via the button's own label/disabled state now,
-    // rather than a separate status line - keeps the sticky row compact.
     function updateActionButton() {
       const { match, special_rules, credit_rules } = matchData;
       const btn = document.getElementById('actionBtn');
@@ -266,9 +272,9 @@
       const { special_rules } = matchData;
       document.getElementById('playerList').style.display = 'none';
       document.getElementById('countsBar').style.display = 'none';
-      // Keep the sticky tabs row visible so the button stays frozen at the
-      // top, just clear the team tabs since they don't apply here.
-      document.getElementById('teamTabs').innerHTML = '';
+      // Keep the sticky action row visible so the button stays frozen at the
+      // top, just clear the role tabs since they don't apply here.
+      document.getElementById('roleTabs').innerHTML = '';
       document.getElementById('specialStep').style.display = 'block';
 
       // Full-page league logo backdrop for the captain/VC step
@@ -377,8 +383,8 @@
           });
         }
 
-        renderTeamTabs();
         renderCountsBar();
+        renderRoleTabs();
         renderPlayerList();
         updateActionButton();
       } catch (err) {

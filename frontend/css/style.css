@@ -74,7 +74,7 @@ body {
   align-items: center;
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 12;
 }
 .topbar h1 { font-size: 18px; margin: 0; }
 .topbar button {
@@ -156,34 +156,40 @@ body.team-select-bg .topbar {
 .credit-bar {
   position: sticky;
   top: 56px;
-  background: rgba(10,14,30,0.65);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(8,10,20,0.96);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(255,255,255,0.1);
   padding: 10px 16px;
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  font-size: 14px;
+  gap: 10px;
+  font-size: 13px;
   font-weight: 600;
   color: #f4f6fb;
-  z-index: 9;
+  z-index: 11;
+  flex-wrap: wrap;
 }
+.filter-pills { display: flex; gap: 8px; overflow-x: auto; }
+.bar-info { display: flex; gap: 14px; white-space: nowrap; font-size: 12px; color: #d7e2ff; }
 
-/* Sticky row holding the team tabs AND the submit/continue button side by
-   side - frozen at the top like the bars above it, so the action button
-   is always reachable without scrolling to the bottom. */
+/* Sticky row holding the role-filter tabs AND the submit/continue button
+   side by side - frozen right below the team-filter row above it, so the
+   action button is always reachable without scrolling. Fully opaque so
+   player rows scrolling underneath never show through. */
 .role-tabs-row {
   position: sticky;
-  top: 98px;
-  z-index: 8;
+  top: 100px;
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
   padding: 10px 16px;
-  background: rgba(10,14,30,0.65);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgba(8,10,20,0.96);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 .role-tabs { display: flex; gap: 8px; overflow-x: auto; flex: 1; min-width: 0; }
@@ -259,12 +265,7 @@ body.team-select-bg .topbar {
   margin-left: 6px;
 }
 
-table.admin-table{
-    width:100%;
-    min-width:900px;   /* keeps all columns visible */
-    border-collapse:collapse;
-    table-layout:auto;
-}
+table.admin-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.admin-table th, table.admin-table td { border: 1px solid var(--border); padding: 8px; text-align: left; }
 table.admin-table th { background: #eef1f6; }
 
