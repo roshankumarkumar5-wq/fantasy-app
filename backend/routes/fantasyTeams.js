@@ -1,11 +1,16 @@
 import express from 'express';
 import { supabase } from '../db/supabase.js';
 import { requireAuth } from '../middleware/auth.js';
+import { calculatePointsBreakdown } from '../utils/points.js';
 
 const router = express.Router();
 
 const MIN_PER_TEAM = 4;
 const MAX_PER_TEAM = 7;
+const MIN_BATTER = 3;
+const MIN_BOWLER = 3;
+const MIN_KEEPER = 1;
+const MIN_ALL_ROUNDER = 1;
 
 // POST /api/fantasy-teams
 // body: { match_id, player_ids: [...], special_picks: [{ player_id, special_rank }] }
@@ -70,7 +75,7 @@ router.post('/', requireAuth, async (req, res) => {
   // players picked from each side.
   const { data: pickedPlayers, error: playersErr } = await supabase
     .from('players')
-    .select('id, real_team_id, credit_value')
+    .select('id, real_team_id, credit_value, role')
     .in('id', player_ids);
 
   if (playersErr) return res.status(500).json({ error: playersErr.message });
@@ -97,6 +102,26 @@ router.post('/', requireAuth, async (req, res) => {
     return res.status(400).json({
       error: `You selected ${countB} player(s) from Team B - must be between ${MIN_PER_TEAM} and ${MAX_PER_TEAM}`
     });
+  }
+
+  // 4c. Role composition check - at least 3 batsmen, 3 bowlers, 1 keeper,
+  // 1 all-rounder (the remaining slots can be any role).
+  const countBat = pickedPlayers.filter(p => p.role === 'batsman').length;
+  const countBowl = pickedPlayers.filter(p => p.role === 'bowler').length;
+  const countKeep = pickedPlayers.filter(p => p.role === 'keeper').length;
+  const countAllRounder = pickedPlayers.filter(p => p.role === 'all-rounder').length;
+
+  if (countBat < MIN_BATTER) {
+    return res.status(400).json({ error: `You need at least ${MIN_BATTER} batsmen (selected ${countBat})` });
+  }
+  if (countBowl < MIN_BOWLER) {
+    return res.status(400).json({ error: `You need at least ${MIN_BOWLER} bowlers (selected ${countBowl})` });
+  }
+  if (countKeep < MIN_KEEPER) {
+    return res.status(400).json({ error: `You need at least ${MIN_KEEPER} wicket-keeper (selected ${countKeep})` });
+  }
+  if (countAllRounder < MIN_ALL_ROUNDER) {
+    return res.status(400).json({ error: `You need at least ${MIN_ALL_ROUNDER} all-rounder (selected ${countAllRounder})` });
   }
 
   // 4b. Credit budget check - only enforced if this match has it enabled.
@@ -165,7 +190,45 @@ router.get('/:match_id', requireAuth, async (req, res) => {
     `)
     .eq('user_team_id', userTeam.id);
 
-  res.json({ team: { ...userTeam, players } });
+  // Pull each player's full raw stats for this match (if entered yet) so we
+  // can show both the final points AND a line-by-line breakdown of how
+  // they were calculated - not just the total alone.
+  const playerIds = (players || []).map(p => p.player.id);
+
+  const { data: statsRows } = await supabase
+    .from('player_match_stats')
+    .select('*')
+    .eq('match_id', match_id)
+    .in('player_id', playerIds);
+  const statsByPlayerId = new Map((statsRows || []).map(s => [s.player_id, s]));
+
+  const { data: specialRules } = await supabase
+    .from('match_special_rules')
+    .select('multipliers')
+    .eq('match_id', match_id)
+    .maybeSingle();
+  const multipliers = specialRules?.multipliers || [];
+
+  const playersWithPoints = (players || []).map(p => {
+    const rawStats = statsByPlayerId.get(p.player.id);
+    const multiplier = p.special_rank ? Number(multipliers[p.special_rank - 1]) || 1 : 1;
+
+    if (!rawStats) {
+      // Stats not entered yet for this player
+      return { ...p, base_points: null, points: null, multiplier, breakdown: [] };
+    }
+
+    const { lines, total: basePoints } = calculatePointsBreakdown(rawStats, p.player.role);
+    return {
+      ...p,
+      base_points: basePoints,
+      points: Math.round(basePoints * multiplier * 10) / 10,
+      multiplier,
+      breakdown: lines
+    };
+  });
+
+  res.json({ team: { ...userTeam, players: playersWithPoints } });
 });
 
 export default router;

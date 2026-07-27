@@ -132,7 +132,8 @@ create table player_match_stats (
   runs_conceded int default 0,
   catches int default 0,
   stumpings int default 0,
-  run_outs int default 0,
+  run_outs int default 0,        -- direct-hit run-outs (single fielder named)
+  run_out_assists int default 0, -- combined run-outs (2+ fielders named), scored lower per person
   base_points numeric(6,1) default 0,   -- calculated per the Dream11-style formula in utils/points.js
   unique(match_id, player_id)
 );

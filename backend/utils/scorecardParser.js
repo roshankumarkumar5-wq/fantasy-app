@@ -25,18 +25,24 @@ function getOrCreate(stats, name) {
       name,
       runs: 0, balls_faced: 0, fours: 0, sixes: 0, is_out: false,
       wickets: 0, bowled_lbw_wickets: 0, maidens: 0, overs_bowled: 0, runs_conceded: 0,
-      catches: 0, stumpings: 0, run_outs: 0
+      catches: 0, stumpings: 0, run_outs: 0, run_out_assists: 0
     });
   }
   return stats.get(key);
 }
 
 function creditFielding(stats, rawName, field) {
-  if (!rawName) return;
-  const name = stripHandednessAndTags(rawName.trim());
-  if (!name) return;
-  const entry = getOrCreate(stats, name);
-  entry[field] += 1;
+    const clean = stripHandednessAndTags(rawName);
+
+    console.log("fielder =", clean);
+
+    const entry = getOrCreate(stats, clean);
+
+    console.log("before =", entry);
+
+    entry[field]++;
+
+    console.log("after =", entry);
 }
 
 function parseBatsmanLine(line) {
@@ -135,10 +141,27 @@ function creditDismissal(stats, statusText) {
     return;
   }
 
-  // run out (<fielder>) - may list multiple names separated by /
-  m = text.match(/run\s*out\s*\(([^)]+)\)/i);
+  // run out (<fielder>) or run out (<fielder1>/<fielder2>) - a single
+  // named fielder is treated as a direct hit (full credit); two or more
+  // names means a combined run-out (thrower + fielder who breaks the
+  // stumps), which scores lower per person since no single person gets
+  // full credit for it. We can't reliably tell from this notation which
+  // fielder actually broke the stumps vs threw it, so both named fielders
+  // get equal "assist" credit rather than splitting unevenly.
+  console.log("text =", JSON.stringify(text));
+
+m = text.match(/run\s*out\s+(.+)/i);
+
+console.log("match =", m);
   if (m) {
-    m[1].split('/').forEach(n => creditFielding(stats, n, 'run_outs'));
+    const fielders = m[1].split('/').map(n => n.trim()).filter(Boolean);
+console.log("m =", m);
+console.log("fielders =", fielders);
+    if (fielders.length === 1) {
+      creditFielding(stats, fielders[0], 'run_outs');
+    } else {
+      fielders.forEach(n => creditFielding(stats, n, 'run_out_assists'));
+    }
     return;
   }
 
@@ -197,6 +220,7 @@ export function parseScorecardText(text) {
     }
   }
 
+console.log(Array.from(stats.values()));
   return Array.from(stats.values());
 }
 

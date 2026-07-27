@@ -258,3 +258,36 @@ Credits are back, redesigned to be genuinely configurable per match rather than 
 - **Database changes**: `players.credit_value` column, and a new `match_credit_rules` table (mirrors `match_special_rules`). Run `database/migrations/009_configurable_credits.sql` if you already have a live Supabase project.
 
 **One real bug fixed along the way**: the match-creation endpoint had a leftover line trying to insert `max_credits` directly into the `matches` table — that column doesn't exist (credits live in the separate `match_credit_rules` table), so every match creation would have hit a database error. Removed that dead code; credit rules are correctly set via their own dedicated call right after a match is created, same as special-player rules.
+
+## 19. What changed in this update (direct-hit vs combined run-outs)
+
+The scorecard parser now distinguishes two kinds of run-out:
+
+- **Direct hit** (`run_outs`) — a single fielder named (e.g. "run out (Player X)"). Full credit, same +8 as a catch/stumping.
+- **Combined/assisted** (`run_out_assists`) — two or more fielders named (e.g. "run out (Player X/Player Y)"), meaning one likely threw and another completed it. Since the scorecard notation doesn't tell us who actually broke the stumps vs who threw, both named fielders get equal "assist" credit rather than an uneven split.
+
+**Point value note**: the scoring screenshots you shared only specified the direct-hit run-out value (+8). The combined-run-out value isn't standardized the same way across fantasy platforms, so this uses **4 points per assist** (half the direct-hit value) as a reasonable default — clearly isolated as `POINTS_PER_RUN_OUT_ASSIST` in `backend/utils/points.js` if you have an exact figure you'd rather use instead.
+
+**Also added**: a saved reference script, `database/scripts/manual_team_insert.sql` — lets you manually insert a fantasy team for a user directly in Supabase's SQL editor, using their email and player names instead of raw UUIDs. Bypasses all the app's normal validation (squad size, credit limits, deadlines), so it's meant for quick fixes/testing, not a replacement for normal signup.
+
+**Database changes**: `player_match_stats.run_out_assists` column added. If you already have a live Supabase project, run `database/migrations/010_run_out_assists.sql`.
+
+## 20. What changed in this update (role-composition rules, run-out scoring values, dynamic sticky headers)
+
+Adopted a substantial set of refinements, including two real bugs I found and fixed along the way:
+
+- **New squad rule**: at least 3 batsmen, 3 bowlers, 1 wicket-keeper, and 1 all-rounder (the remaining slots can be any role) - enforced both in `team-select.html` and now, to close a real gap, in the backend (`fantasyTeams.js`) too. Previously this would only have been a frontend-only check, meaning a bypassed/modified client could have submitted an invalid squad with no server-side objection.
+- **Run-out scoring values updated**: direct hit is now 12 points (was 8), combined/assisted is 6 points (was 4). **Bug fixed**: the version I received had a copy-paste issue where both the direct-hit and combined-run-out point values were being multiplied against the *same* `run_outs` field — meaning every direct hit was silently double-counted (18 instead of 12) and combined run-outs were never actually read at all. Fixed so `run_outs` (direct) and `run_out_assists` (combined) are each used correctly.
+- **Bowling/fielding milestone values retuned**: 4-wicket haul now +12 (was +16), 5-wicket haul now +16 (was +25) — more modest bonuses at the top end. New: a **catch milestone bonus** (3 catches = +4, 4 = +6, 5 = +8, highest tier only).
+- **Economy rate and strike rate bonuses replaced with exact discrete tiers**, instead of my earlier linear-interpolation guess between two endpoints — e.g. economy ≤3 = +6, ≤4 = +5, ... down to >11 = -6. This is a more accurate match to how these are typically banded on real fantasy platforms.
+- **Team-select header now measures itself dynamically** (`updateStickyOffsets()`) instead of using hardcoded pixel offsets for where the second sticky row sits — since the counts bar can wrap to two lines depending on screen width, a fixed offset risked a gap or overlap; this fixes that properly by reading actual rendered heights.
+- **Counts bar redesigned**: clickable team-filter pills are now a separate row from a fuller summary line (per-team count, per-role count, credits, total) with green ✓ / red ✗ indicators showing at a glance which minimums are met.
+- **Bug fixed**: the submit button's status text (e.g. "Select 2 more", "Need 4+ Blue") never had a branch for the new role-composition minimums — so if your squad was blocked specifically because you were short on bowlers or a keeper, the button would just say "Continue" while staying disabled, with no indication why. Added the missing branches.
+
+No new database migration needed for this round — this was scoring logic, validation, and layout, not schema changes.
+
+## 21. What changed in this update (points drill-down)
+
+- **`points.js` refactored**: the scoring formula now builds a line-by-line breakdown internally (`calculatePointsBreakdown()`), and the final total (`calculateBasePoints()`) is just the sum of that breakdown — guarantees the drill-down view and the actual saved score can never drift apart, since they're now the same calculation.
+- **Results page**: tap any player in "Your Team" to expand a breakdown showing exactly how their points were built up — runs, boundary bonus, milestone bonus, strike-rate bonus, wickets, economy bonus, catches, run-outs, etc. — each on its own line, followed by the base total and (if they were your Captain/VC) the multiplier applied.
+- No new database columns — this reads the same `player_match_stats` row that was already being saved, just returns the full breakdown alongside it now instead of only the final number.

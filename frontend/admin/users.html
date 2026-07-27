@@ -49,8 +49,7 @@
         }
         wrap.innerHTML = `
           <div class="card">
-    <div class="table-responsive">
-        <table class="admin-table">
+            <table class="admin-table">
               <tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th><th></th></tr>
               ${rows.map(r => `
                 <tr data-id="${r.id}">
@@ -64,7 +63,6 @@
               `).join('')}
             </table>
           </div>
-</div>
           <div class="card" id="resetResultCard" style="display:none;"></div>
         `;
 

@@ -1,16 +1,14 @@
 // Dream11-style points calculation. Formula is based on the standard
 // scoring structure common to Dream11/My11Circle-style platforms - values
 // are hardcoded here rather than stored in the database, since the rule
-// set is complex (milestones, sliding-scale bonuses) and not a good fit
-// for simple per-unit multipliers. Adjust the constants below if you want
-// a different scoring structure.
+// set is complex (milestones, discrete tiered bonuses) and not a good fit
+// for simple per-unit multipliers. Adjust the constants/tiers below if you
+// want a different scoring structure.
 //
-// NOTE on two specific rules where only the two extreme values were
-// available (economy rate and strike rate bonuses): the exact
-// intermediate tier boundaries weren't specified, so this implements a
-// straight LINEAR interpolation between the given endpoints rather than
-// guessing at discrete tiers. If you have an exact tier table you want to
-// match instead, replace economyRatePoints()/strikeRatePoints() below.
+// Run-outs are split into two categories: a direct hit (one fielder
+// named) scores full points; a combined run-out (2+ fielders named, e.g.
+// a thrower + a fielder who breaks the stumps) scores lower per person,
+// since neither individually gets full credit for it.
 
 const POINTS_PER_RUN = 1;
 const POINTS_PER_FOUR = 1;      // in addition to the run itself
@@ -21,7 +19,10 @@ const POINTS_PER_WICKET = 25;   // excludes run-outs
 const POINTS_PER_BOWLED_LBW = 8;
 const POINTS_PER_MAIDEN = 8;
 
-const POINTS_PER_FIELDING_DISMISSAL = 8; // catch, stumping, or direct-hit run out (each)
+const POINTS_PER_FIELDING_DISMISSAL = 8; // catch, stumping, 
+const POINTS_PER_RUN_OUT_DIRECT = 12;    //  direct-hit run out (One person)
+const POINTS_PER_RUN_OUT_COMBINED = 6;    //  run out assisted (two person)
+
 
 // Batting milestones - only the HIGHEST tier reached applies (not stacked).
 const BATTING_MILESTONES = [
@@ -38,6 +39,13 @@ const BOWLING_MILESTONES = [
   { wickets: 3, points: 8 }
 ];
 
+// Catch milestones - only the HIGHEST tier reached applies (not stacked).
+const FIELDING_MILESTONES = [
+  { catches: 5, points: 8 },
+  { catches: 4, points: 6 },
+  { catches: 3, points: 4 }
+];
+
 function battingMilestoneBonus(runs) {
   const tier = BATTING_MILESTONES.find(m => runs >= m.runs);
   return tier ? tier.points : 0;
@@ -45,6 +53,11 @@ function battingMilestoneBonus(runs) {
 
 function bowlingMilestoneBonus(wickets) {
   const tier = BOWLING_MILESTONES.find(m => wickets >= m.wickets);
+  return tier ? tier.points : 0;
+}
+
+function fieldingMilestoneBonus(catches) {
+  const tier = FIELDING_MILESTONES.find(m => catches >= m.catches);
   return tier ? tier.points : 0;
 }
 
@@ -92,10 +105,16 @@ function strikeRatePoints(runs, ballsFaced) {
 }
 
 // stats: { runs, balls_faced, fours, sixes, is_out, wickets, bowled_lbw_wickets,
-//          maidens, overs_bowled, runs_conceded, catches, stumpings, run_outs }
+//          maidens, overs_bowled, runs_conceded, catches, stumpings, run_outs,
+//          run_out_assists }
 // playerRole: 'batsman' | 'bowler' | 'all-rounder' | 'keeper' - duck penalty
 // only applies to batsmen and all-rounders, per the standard rule set.
-export function calculateBasePoints(stats, playerRole) {
+//
+// Returns { lines: [{ label, points }], total } - a line-by-line breakdown
+// of how the total was built up, e.g. for showing a drill-down view of a
+// player's score. Only non-zero components are included, so an unused
+// category (e.g. a pure batsman's bowling section) doesn't clutter it.
+export function calculatePointsBreakdown(stats, playerRole) {
   const runs = stats.runs || 0;
   const ballsFaced = stats.balls_faced || 0;
   const fours = stats.fours || 0;
@@ -109,30 +128,43 @@ export function calculateBasePoints(stats, playerRole) {
   const catches = stats.catches || 0;
   const stumpings = stats.stumpings || 0;
   const runOuts = stats.run_outs || 0;
+  const runOutAssists = stats.run_out_assists || 0;
 
-  let points = 0;
+  const lines = [];
+  const add = (label, points) => {
+    if (points) lines.push({ label, points: Math.round(points * 10) / 10 });
+  };
 
   // Batting
-  points += runs * POINTS_PER_RUN;
-  points += fours * POINTS_PER_FOUR;
-  points += sixes * POINTS_PER_SIX;
-  points += battingMilestoneBonus(runs);
+  add(`Runs (${runs})`, runs * POINTS_PER_RUN);
+  add(`Boundary bonus (${fours} four${fours === 1 ? '' : 's'})`, fours * POINTS_PER_FOUR);
+  add(`Six bonus (${sixes} six${sixes === 1 ? '' : 'es'})`, sixes * POINTS_PER_SIX);
+  add('Batting milestone bonus', battingMilestoneBonus(runs));
   if (isOut && runs === 0 && (playerRole === 'batsman' || playerRole === 'all-rounder')) {
-    points += DUCK_PENALTY;
+    add('Duck penalty', DUCK_PENALTY);
   }
-  points += strikeRatePoints(runs, ballsFaced);
+  add('Strike rate bonus/penalty', strikeRatePoints(runs, ballsFaced));
 
   // Bowling
-  points += wickets * POINTS_PER_WICKET;
-  points += bowlingMilestoneBonus(wickets);
-  points += bowledLbwWickets * POINTS_PER_BOWLED_LBW;
-  points += maidens * POINTS_PER_MAIDEN;
-  points += economyRatePoints(runsConceded, oversBowled);
+  add(`Wickets (${wickets})`, wickets * POINTS_PER_WICKET);
+  add('Bowling milestone bonus', bowlingMilestoneBonus(wickets));
+  add(`Bowled/LBW bonus (${bowledLbwWickets})`, bowledLbwWickets * POINTS_PER_BOWLED_LBW);
+  add(`Maiden overs (${maidens})`, maidens * POINTS_PER_MAIDEN);
+  add('Economy rate bonus/penalty', economyRatePoints(runsConceded, oversBowled));
 
   // Fielding
-  points += (catches + stumpings + runOuts) * POINTS_PER_FIELDING_DISMISSAL;
+  add(`Catches (${catches})`, catches * POINTS_PER_FIELDING_DISMISSAL);
+  add(`Stumpings (${stumpings})`, stumpings * POINTS_PER_FIELDING_DISMISSAL);
+  add('Fielding milestone bonus', fieldingMilestoneBonus(catches));
+  add(`Run out - direct hit (${runOuts})`, runOuts * POINTS_PER_RUN_OUT_DIRECT);
+  add(`Run out - assisted (${runOutAssists})`, runOutAssists * POINTS_PER_RUN_OUT_COMBINED);
 
-  return Math.round(points * 10) / 10; // round to 1 decimal place
+  const total = Math.round(lines.reduce((sum, l) => sum + l.points, 0) * 10) / 10;
+  return { lines, total };
+}
+
+export function calculateBasePoints(stats, playerRole) {
+  return calculatePointsBreakdown(stats, playerRole).total;
 }
 
 // Applies special player multipliers to a user's team.

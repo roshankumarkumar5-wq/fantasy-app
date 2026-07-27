@@ -34,7 +34,7 @@
 
     <div class="card">
       <h3>3. Upload Final Stats CSV</h3>
-      <p class="match-meta">Upload the CSV — either the one generated in step 2 (edited/corrected), or one you build yourself. Columns: <code>player_name, player_id, runs, balls_faced, fours, sixes, is_out, wickets, bowled_lbw_wickets, maidens, overs_bowled, runs_conceded, catches, stumpings, run_outs</code> (player_id is optional — matching is done by name; is_out should be <code>true</code> or <code>false</code>; overs_bowled uses cricket notation e.g. 3.4 = 3 overs and 4 balls). This is what unlocks the Finalize step below.</p>
+      <p class="match-meta">Upload the CSV — either the one generated in step 2 (edited/corrected), or one you build yourself. Columns: <code>player_name, player_id, runs, balls_faced, fours, sixes, is_out, wickets, bowled_lbw_wickets, maidens, overs_bowled, runs_conceded, catches, stumpings, run_outs, run_out_assists</code> (player_id is optional — matching is done by name; is_out should be <code>true</code> or <code>false</code>; overs_bowled uses cricket notation e.g. 3.4 = 3 overs and 4 balls; run_outs = direct hit by one fielder, run_out_assists = combined run-out with 2+ fielders involved). This is what unlocks the Finalize step below.</p>
       <input type="file" id="statsCsvFile" accept=".csv">
       <button class="btn" id="uploadStatsCsvBtn">Upload Stats CSV</button>
       <div id="statsCsvMsg"></div>
@@ -254,6 +254,8 @@
         <input type="number" class="stat-stumpings" value="0">
         <label>Run Outs (direct hit)</label>
         <input type="number" class="stat-runouts" value="0">
+        <label>Run Out Assists (combined, 2+ fielders involved)</label>
+        <input type="number" class="stat-runout-assists" value="0">
       `;
       document.getElementById('statsRows').appendChild(row);
       populatePlayerSelect(row.querySelector('.stat-player-select'));
@@ -278,7 +280,8 @@
         runs_conceded: parseInt(row.querySelector('.stat-conceded').value) || 0,
         catches: parseInt(row.querySelector('.stat-catches').value) || 0,
         stumpings: parseInt(row.querySelector('.stat-stumpings').value) || 0,
-        run_outs: parseInt(row.querySelector('.stat-runouts').value) || 0
+        run_outs: parseInt(row.querySelector('.stat-runouts').value) || 0,
+        run_out_assists: parseInt(row.querySelector('.stat-runout-assists').value) || 0
       })).filter(s => s.player_id);
 
       if (stats.length === 0) {

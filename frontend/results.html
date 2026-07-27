@@ -37,15 +37,45 @@
         }
         el.innerHTML = `
           <h3>Your Team - ${team.total_points ?? 0} points</h3>
-          ${team.players.map(tp => `
-            <div class="player-row">
-              <div class="player-info">
-                <span class="player-name">${tp.player.name} ${tp.special_rank ? `<span class="special-chip">S${tp.special_rank}</span>` : ''}</span>
-                <span class="player-meta">${tp.player.role}</span>
+          ${team.players.map((tp, i) => `
+            <div class="player-row" data-idx="${i}" style="cursor:pointer; flex-direction:column; align-items:stretch;">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div class="player-info">
+                  <span class="player-name">${tp.player.name} ${tp.special_rank ? `<span class="special-chip">S${tp.special_rank}</span>` : ''}</span>
+                  <span class="player-meta">${tp.player.role}${tp.points !== null ? ' · tap for breakdown' : ''}</span>
+                </div>
+                <span style="font-weight:700; color:var(--primary);">${tp.points === null ? '—' : tp.points}</span>
+              </div>
+              <div class="breakdown-panel" id="breakdown-${i}" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--border);">
+                ${tp.breakdown && tp.breakdown.length > 0 ? `
+                  ${tp.breakdown.map(line => `
+                    <div style="display:flex; justify-content:space-between; font-size:13px; padding:3px 0;">
+                      <span style="color:var(--muted);">${line.label}</span>
+                      <span style="font-weight:600; color:${line.points < 0 ? 'var(--danger)' : 'var(--text)'};">${line.points > 0 ? '+' : ''}${line.points}</span>
+                    </div>
+                  `).join('')}
+                  <div style="display:flex; justify-content:space-between; font-size:13px; padding:6px 0 0; margin-top:4px; border-top:1px dashed var(--border);">
+                    <span style="font-weight:600;">Base points</span>
+                    <span style="font-weight:700;">${tp.base_points}</span>
+                  </div>
+                  ${tp.special_rank ? `
+                    <div style="display:flex; justify-content:space-between; font-size:13px; padding:3px 0;">
+                      <span style="color:var(--muted);">Special player ×${tp.multiplier}</span>
+                      <span style="font-weight:600;">${tp.points}</span>
+                    </div>
+                  ` : ''}
+                ` : '<p class="match-meta">No stats entered for this player yet.</p>'}
               </div>
             </div>
           `).join('')}
         `;
+
+        document.querySelectorAll('.player-row[data-idx]').forEach(row => {
+          row.addEventListener('click', () => {
+            const panel = document.getElementById(`breakdown-${row.dataset.idx}`);
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+          });
+        });
       } catch (err) {
         el.innerHTML = `<p class="error-msg">${err.message}</p>`;
       }

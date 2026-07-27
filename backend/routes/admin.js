@@ -254,7 +254,7 @@ router.post('/matches/:id/scoresheet', upload.single('file'), async (req, res) =
 
     const parsedStats = parseScorecardText(textResult.text);
 
-    const rows = ['player_name,player_id,runs,balls_faced,fours,sixes,is_out,wickets,bowled_lbw_wickets,maidens,overs_bowled,runs_conceded,catches,stumpings,run_outs'];
+    const rows = ['player_name,player_id,runs,balls_faced,fours,sixes,is_out,wickets,bowled_lbw_wickets,maidens,overs_bowled,runs_conceded,catches,stumpings,run_outs,run_out_assists'];
     for (const s of parsedStats) {
       const match = rosterByNormalizedName.get(normalizeName(s.name));
       const displayName = match ? match.name : s.name;
@@ -263,7 +263,7 @@ router.post('/matches/:id/scoresheet', upload.single('file'), async (req, res) =
       else unmatchedNames.push(s.name);
 
       const safeName = displayName.includes(',') ? `"${displayName.replace(/"/g, '""')}"` : displayName;
-      rows.push(`${safeName},${playerId},${s.runs},${s.balls_faced},${s.fours},${s.sixes},${s.is_out},${s.wickets},${s.bowled_lbw_wickets},${s.maidens},${s.overs_bowled},${s.runs_conceded},${s.catches},${s.stumpings},${s.run_outs}`);
+      rows.push(`${safeName},${playerId},${s.runs},${s.balls_faced},${s.fours},${s.sixes},${s.is_out},${s.wickets},${s.bowled_lbw_wickets},${s.maidens},${s.overs_bowled},${s.runs_conceded},${s.catches},${s.stumpings},${s.run_outs},${s.run_out_assists}`);
     }
     csv = rows.join('\n');
   } catch (parseErr) {
@@ -311,7 +311,8 @@ router.post('/matches/:id/stats', async (req, res) => {
       runs_conceded: s.runs_conceded || 0,
       catches: s.catches || 0,
       stumpings: s.stumpings || 0,
-      run_outs: s.run_outs || 0
+      run_outs: s.run_outs || 0,
+      run_out_assists: s.run_out_assists || 0
     };
     return {
       match_id: id,
@@ -339,7 +340,7 @@ router.post('/matches/:id/stats', async (req, res) => {
 // finalized (see /finalize below) - not per-player completeness checks.
 // CSV columns: player_name, player_id (optional), runs, balls_faced, fours,
 // sixes, is_out (true/false), wickets, bowled_lbw_wickets, maidens,
-// overs_bowled, runs_conceded, catches, stumpings, run_outs
+// overs_bowled, runs_conceded, catches, stumpings, run_outs, run_out_assists
 router.post('/matches/:id/stats/upload-csv', upload.single('file'), async (req, res) => {
   const { id } = req.params;
   if (!req.file) return res.status(400).json({ error: 'A CSV file is required (field name: file)' });
@@ -399,7 +400,8 @@ router.post('/matches/:id/stats/upload-csv', upload.single('file'), async (req, 
       runs_conceded: parseInt(r.runs_conceded, 10) || 0,
       catches: parseInt(r.catches, 10) || 0,
       stumpings: parseInt(r.stumpings, 10) || 0,
-      run_outs: parseInt(r.run_outs, 10) || 0
+      run_outs: parseInt(r.run_outs, 10) || 0,
+      run_out_assists: parseInt(r.run_out_assists, 10) || 0
     };
 
     rowsToSave.push({
