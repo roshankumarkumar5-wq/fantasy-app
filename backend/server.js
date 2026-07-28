@@ -5,6 +5,7 @@ import authRoutes from './routes/auth.js';
 import matchesRoutes from './routes/matches.js';
 import fantasyTeamsRoutes from './routes/fantasyTeams.js';
 import adminRoutes from './routes/admin.js';
+import leaderboardRoutes from './routes/leaderboard.js';
 
 dotenv.config();
 
@@ -18,6 +19,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/matches', matchesRoutes);
 app.use('/api/fantasy-teams', fantasyTeamsRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/leaderboard', leaderboardRoutes);
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

@@ -12,14 +12,15 @@
     <button id="logoutBtn">Log Out</button>
   </div>
   <div class="container">
-    <div class="tab-nav">
-      <a href="dashboard.html" class="active">Matches</a>
+    <div class="tab-nav" id="adminTabs">
+      <a href="#" class="active" data-tab="matches">Matches</a>
       <a href="teams-players.html">Teams &amp; Players</a>
       <a href="approvals.html">Approvals</a>
       <a href="users.html">Users</a>
+      <a href="#" data-tab="leaderboard">Leaderboard</a>
     </div>
 
-    <div class="card">
+    <div id="createMatchCard" class="card">
       <h3>Create New Match</h3>
       <a href="create-match.html"><button class="btn">+ Schedule a Match</button></a>
     </div>
@@ -37,6 +38,9 @@
       window.location.href = '../login.html';
     });
 
+    let overallData = [];
+    let viewedTeams = {};
+
     function teamLogo(team) {
       if (team?.logo_url) {
         return `<img src="${team.logo_url}" class="promo-team-logo" alt="${team.short_code || team.name}">`;
@@ -46,6 +50,7 @@
 
     async function loadMatches() {
       const container = document.getElementById('matchList');
+      document.getElementById('createMatchCard').style.display = 'block';
       try {
         const matches = await Api.getMatches();
         if (matches.length === 0) {
@@ -90,6 +95,127 @@
         container.innerHTML = `<p class="error-msg">${err.message}</p>`;
       }
     }
+
+    // ---- Overall Leaderboard with drill-down ----
+    async function renderOverallLeaderboard(container) {
+      document.getElementById('createMatchCard').style.display = 'none';
+      if (overallData.length === 0) {
+        try {
+          overallData = await Api.getOverallLeaderboard();
+        } catch (err) {
+          container.innerHTML = `<div class="card"><p class="error-msg">${err.message}</p></div>`;
+          return;
+        }
+      }
+
+      if (overallData.length === 0) {
+        container.innerHTML = '<div class="card"><p>No completed matches yet.</p></div>';
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="card">
+          <h3>Overall Leaderboard</h3>
+          <p class="match-meta">Total points across all completed matches. Click a user to drill down.</p>
+        </div>
+        <div id="overallList">${overallData.map((u, i) => `
+          <div class="card" style="cursor:pointer;">
+            <div class="user-header" data-idx="${i}" style="display:flex; justify-content:space-between; align-items:center;">
+              <span><strong>${i + 1}.</strong> ${u.full_name}</span>
+              <span style="font-weight:700; color:var(--primary);">${u.total_points}</span>
+            </div>
+            <div class="user-matches" id="adminUserMatches-${i}" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--border);"></div>
+          </div>
+        `).join('')}</div>
+      `;
+
+      document.querySelectorAll('.user-header').forEach(hdr => {
+        hdr.addEventListener('click', () => {
+          const idx = hdr.dataset.idx;
+          const panel = document.getElementById(`adminUserMatches-${idx}`);
+          if (panel.style.display === 'none') {
+            renderUserMatches(idx, panel);
+          }
+          panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        });
+      });
+    }
+
+    function renderUserMatches(idx, panel) {
+      const user = overallData[idx];
+      panel.innerHTML = user.matches.map((m, mi) => `
+        <div class="match-row" data-mi="${mi}" data-uidx="${idx}" style="display:flex; justify-content:space-between; align-items:center; padding:6px 0 6px 16px; cursor:pointer; border-bottom:1px solid var(--border);">
+          <span style="font-size:13px;">${m.match_label} <span class="match-meta">(${formatIST(m.match_date)})</span></span>
+          <span style="font-weight:600; font-size:13px;">${m.points}</span>
+        </div>
+        <div class="match-team" id="adminMatchTeam-${idx}-${mi}" style="display:none; padding:8px 0 8px 32px;"></div>
+      `).join('');
+
+      panel.querySelectorAll('.match-row').forEach(row => {
+        row.addEventListener('click', () => {
+          const mi = row.dataset.mi;
+          const ui = row.dataset.uidx;
+          const teamPanel = document.getElementById(`adminMatchTeam-${ui}-${mi}`);
+          if (teamPanel.style.display === 'none') {
+            renderMatchTeam(ui, mi, teamPanel);
+          }
+          teamPanel.style.display = teamPanel.style.display === 'none' ? 'block' : 'none';
+        });
+      });
+    }
+
+    async function renderMatchTeam(uIdx, mIdx, panel) {
+      const user = overallData[uIdx];
+      const match = user.matches[mIdx];
+      const cacheKey = `${user.user_id}-${match.match_id}`;
+
+      if (viewedTeams[cacheKey]) {
+        renderTeamPlayers(viewedTeams[cacheKey], panel);
+        return;
+      }
+
+      panel.innerHTML = '<p class="match-meta">Loading...</p>';
+      try {
+        const { team } = await Api.getUserTeam(match.match_id, user.user_id);
+        if (!team) {
+          panel.innerHTML = '<p class="match-meta">No team submitted.</p>';
+          return;
+        }
+        viewedTeams[cacheKey] = team;
+        renderTeamPlayers(team, panel);
+      } catch (err) {
+        panel.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    }
+
+    function renderTeamPlayers(team, panel) {
+      panel.innerHTML = `
+        <div style="font-size:12px; font-weight:600; margin-bottom:6px;">Total: ${team.total_points ?? 0} pts</div>
+        ${team.players.map(tp => `
+          <div style="display:flex; justify-content:space-between; font-size:13px; padding:4px 0;">
+            <span>${tp.player.name}${tp.special_rank ? ` <span class="special-chip">S${tp.special_rank}</span>` : ''}</span>
+            <span style="font-weight:600;">${tp.points === null ? '—' : tp.points}</span>
+          </div>
+        `).join('')}
+      `;
+    }
+
+    // Tab switching
+    document.querySelectorAll('#adminTabs a[data-tab]').forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        e.preventDefault();
+        document.querySelectorAll('#adminTabs a[data-tab]').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const tabName = tab.dataset.tab;
+        const container = document.getElementById('matchList');
+        if (tabName === 'leaderboard') {
+          renderOverallLeaderboard(container);
+        } else {
+          loadMatches();
+        }
+      });
+    });
+
     loadMatches();
   </script>
 </body>

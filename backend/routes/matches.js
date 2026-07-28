@@ -90,9 +90,38 @@ router.get('/:id', requireAuth, async (req, res) => {
   });
 });
 
-// GET /api/matches/:id/leaderboard - public leaderboard for logged-in users
+// GET /api/matches/:id/submitters - users who have submitted teams, ordered by
+// submission time (earliest first). Only returns names, no team details.
+router.get('/:id/submitters', requireAuth, async (req, res) => {
+  const { id } = req.params;
+
+  const { data, error } = await supabase
+    .from('user_teams')
+    .select('user:user_id ( full_name ), submitted_at')
+    .eq('match_id', id)
+    .not('submitted_at', 'is', null)
+    .order('submitted_at', { ascending: true });
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json((data || []).map(row => ({
+    full_name: row.user?.full_name || 'Unknown',
+    submitted_at: row.submitted_at
+  })));
+});
+
+// GET /api/matches/:id/leaderboard - public leaderboard for logged-in users.
+// For completed matches, user_id is included so users can click through to
+// see each other's teams. During selection/locked, user_id is omitted for privacy.
 router.get('/:id/leaderboard', requireAuth, async (req, res) => {
   const { id } = req.params;
+
+  const { data: match } = await supabase
+    .from('matches')
+    .select('status')
+    .eq('id', id)
+    .single();
+
   const { data, error } = await supabase
     .from('user_teams')
     .select('user_id, total_points, user:user_id ( full_name )')
@@ -101,11 +130,13 @@ router.get('/:id/leaderboard', requireAuth, async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
 
-  // Don't leak other users' internal ids beyond what's needed to highlight "you"
+  const showUserIds = match?.status === 'completed';
+
   const ranked = data.map((row, i) => ({
     rank: i + 1,
     full_name: row.user?.full_name || 'Unknown',
     total_points: row.total_points,
+    ...(showUserIds ? { user_id: row.user_id } : {}),
     is_you: row.user_id === req.user.id
   }));
 

@@ -7,8 +7,8 @@ const router = express.Router();
 
 const MIN_PER_TEAM = 4;
 const MAX_PER_TEAM = 7;
-const MIN_BATTER = 3;
-const MIN_BOWLER = 3;
+const MIN_BATTER = 2;
+const MIN_BOWLER = 2;
 const MIN_KEEPER = 1;
 const MIN_ALL_ROUNDER = 1;
 
@@ -168,10 +168,25 @@ router.post('/', requireAuth, async (req, res) => {
   res.json({ success: true, user_team_id: userTeam.id });
 });
 
-// GET /api/fantasy-teams/:match_id - get the logged-in user's team for a match
+// GET /api/fantasy-teams/:match_id - get a user's team for a match.
+// By default returns the logged-in user's team. If ?userId=<uuid> is provided
+// and differs from the logged-in user, the match must be completed for privacy.
 router.get('/:match_id', requireAuth, async (req, res) => {
-  const userId = req.user.id;
+  let userId = req.user.id;
   const { match_id } = req.params;
+  const targetUserId = req.query.userId;
+
+  if (targetUserId && targetUserId !== userId) {
+    const { data: match } = await supabase
+      .from('matches')
+      .select('status')
+      .eq('id', match_id)
+      .single();
+    if (!match || match.status !== 'completed') {
+      return res.status(403).json({ error: 'You can only view other users\' teams for completed matches.' });
+    }
+    userId = targetUserId;
+  }
 
   const { data: userTeam } = await supabase
     .from('user_teams')
@@ -228,7 +243,14 @@ router.get('/:match_id', requireAuth, async (req, res) => {
     };
   });
 
-  res.json({ team: { ...userTeam, players: playersWithPoints } });
+  // Include the team owner's name when viewing another user's team
+  let userName = null;
+  if (targetUserId && targetUserId !== req.user.id) {
+    const { data: u } = await supabase.from('users').select('full_name').eq('id', userId).single();
+    if (u) userName = u.full_name;
+  }
+
+  res.json({ team: { ...userTeam, players: playersWithPoints, user_name: userName } });
 });
 
 export default router;

@@ -48,8 +48,8 @@
 
     const MIN_PER_TEAM = 4;
     const MAX_PER_TEAM = 7;
-    const MIN_BATTER = 3;
-    const MIN_BOWLER = 3;
+    const MIN_BATTER = 2;
+    const MIN_BOWLER = 2;
     const MIN_KEEPER = 1;
     const MIN_ALL = 1;
     const ROLE_LABELS = {
@@ -378,13 +378,55 @@ function updateStickyOffsets() {
           player_ids: Array.from(selectedIds),
           special_picks
         });
-        alert('Team submitted successfully!');
-        window.location.href = 'matches.html';
+        showSubmitters();
       } catch (err) {
         alert('Error: ' + err.message);
         btn.disabled = false;
         btn.textContent = 'Submit Team';
       }
+    }
+
+    function showSubmitters() {
+      const container = document.getElementById('playerList');
+      container.innerHTML = '<div class="card"><p>Loading...</p></div>';
+      document.getElementById('countsBar').style.display = 'none';
+      document.getElementById('tabsRow').style.display = 'none';
+      document.getElementById('specialStep').style.display = 'none';
+      document.getElementById('bgLogoLayer').style.display = 'none';
+      Api.getSubmitters(matchId).then(submitters => {
+        container.innerHTML = `
+          <div class="card">
+            <h3>Team Submitted ✓</h3>
+            <p class="match-meta">${submitters.length} team(s) submitted so far:</p>
+            <ol style="padding-left:20px; margin:12px 0;">
+              ${submitters.map(s => `<li style="padding:4px 0;">${s.full_name}</li>`).join('')}
+            </ol>
+            <button class="btn secondary" id="updateTeamBtn" style="margin-top:8px;">Update Team</button>
+            <button class="btn" onclick="window.location.href='matches.html'">Back to Matches</button>
+          </div>
+        `;
+        document.getElementById('updateTeamBtn').addEventListener('click', () => {
+          container.innerHTML = '';
+          document.getElementById('countsBar').style.display = 'flex';
+          document.getElementById('tabsRow').style.display = 'flex';
+          document.getElementById('bgLogoLayer').style.display = 'flex';
+          renderCountsBar();
+          updateStickyOffsets();
+          renderRoleTabs();
+          renderPlayerList();
+          updateActionButton();
+          if (matchData.special_rules.enabled && step === 2) {
+            renderSpecialStep();
+          }
+        });
+      }).catch(() => {
+        container.innerHTML = `
+          <div class="card">
+            <h3>Team Submitted ✓</h3>
+            <button class="btn" onclick="window.location.href='matches.html'">Back to Matches</button>
+          </div>
+        `;
+      });
     }
 
     document.getElementById('actionBtn').addEventListener('click', () => {

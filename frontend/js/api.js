@@ -62,7 +62,10 @@ const Api = {
 
   submitTeam: (payload) => apiRequest('/fantasy-teams', { method: 'POST', body: payload }),
   getMyTeam: (matchId) => apiRequest(`/fantasy-teams/${matchId}`),
+  getUserTeam: (matchId, userId) => apiRequest(`/fantasy-teams/${matchId}?userId=${userId}`),
   getPublicLeaderboard: (matchId) => apiRequest(`/matches/${matchId}/leaderboard`),
+  getSubmitters: (matchId) => apiRequest(`/matches/${matchId}/submitters`),
+  getOverallLeaderboard: () => apiRequest('/leaderboard/overall'),
 
   // Admin
   listRealTeams: () => apiRequest('/admin/teams'),
