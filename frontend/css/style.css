@@ -14,14 +14,27 @@
 
 /* ============================================================
    Themed pages (login, signup, admin, matches list, results,
-   team-select) - dark stadium-photo backdrop with overlay so
-   text stays readable. Individual components below get their
-   own dark-compatible styling when a parent has this class.
+   team-select) - vibrant stadium-photo backdrop with a subtle
+   animated overlay so text stays readable while the image
+   still pops. Individual components below get their own dark-
+   compatible styling when a parent has this class.
    ============================================================ */
 body.themed {
-  background: linear-gradient(rgba(8, 10, 22, 0.72), rgba(8, 10, 22, 0.82)), url('../images/background.jpg') center/cover fixed no-repeat;
   min-height: 100vh;
+  position: relative;
 }
+/* Fixed background layer (avoids iOS Safari background-attachment:fixed bug) */
+body.themed::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    linear-gradient(135deg, rgba(8,10,22,0.55) 0%, rgba(20,40,100,0.45) 50%, rgba(8,10,22,0.55) 100%),
+    url('../images/background.jpg') center/cover no-repeat;
+  z-index: -2;
+}
+
+
 body.themed .topbar {
   background: rgba(10, 14, 30, 0.55);
   backdrop-filter: blur(6px);
@@ -423,11 +436,10 @@ table.admin-table th { background: #eef1f6; }
 .promo-status-completed { background: rgba(22,163,74,0.2); color: #4ade80; }
 
 /* ============================================================
-   Team-select page: pale team/LBS logo watermark, now covering
-   the FULL PAGE (fixed, behind everything) rather than just the
-   area behind the player list. Purely decorative - pointer-events
-   disabled so it never interferes with tapping player rows or
-   any other control on the page.
+   Full-page background watermark layer - sits behind all content
+   on themed pages. Shows the league logo plus (where available)
+   team logos from the match data. Purely decorative - pointer-
+   events disabled so it never interferes with taps/clicks.
    ============================================================ */
 .bg-logo-layer {
   position: fixed;
@@ -435,14 +447,35 @@ table.admin-table th { background: #eef1f6; }
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 32px;
-  opacity: 0.5;
+  gap: 40px;
+  flex-wrap: wrap;
   pointer-events: none;
   z-index: 0;
   overflow: hidden;
+  padding: 20px;
 }
 .bg-logo-layer img {
-  width: 260px;
-  height: 260px;
+  width: 200px;
+  height: 200px;
   object-fit: contain;
+  opacity: 0.35;
+  filter: drop-shadow(0 0 20px rgba(255,255,255,0.06));
+  animation: logoDrift 20s ease-in-out infinite alternate;
+  will-change: transform;
+}
+.bg-logo-layer img:nth-child(2) { animation-delay: -5s; }
+.bg-logo-layer img:nth-child(3) { animation-delay: -10s; }
+.bg-logo-layer img:nth-child(4) { animation-delay: -15s; }
+@keyframes logoDrift {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  100% { transform: translate3d(0, -24px, 0) scale(1.04); }
+}
+
+/* Smaller logos on mobile to avoid overwhelming the screen */
+@media (max-width: 480px) {
+  .bg-logo-layer img {
+    width: 120px;
+    height: 120px;
+  }
+  .bg-logo-layer { gap: 20px; }
 }
