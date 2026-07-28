@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Admin Dashboard</title>
-<link rel="stylesheet" href="../css/style.css?v=1785288629">
+<link rel="stylesheet" href="../css/style.css?v=1785289715">
   </head>
 <body class="themed">
   <div class="topbar">
@@ -21,6 +21,7 @@
       <a href="approvals.html">Approvals</a>
       <a href="users.html">Users</a>
       <a href="#" data-tab="leaderboard">Leaderboard</a>
+      <a href="#" data-tab="audit">Audit Log</a>
     </div>
 
     <div id="createMatchCard" class="card">
@@ -37,11 +38,12 @@
   </div>
 
   <script>window.API_BASE_URL = 'https://fantasy-app-backend-znyu.onrender.com/api';</script>
-  <script src="../js/api.js?v=1785288629"></script>
+  <script src="../js/api.js?v=1785289715"></script>
   <script>
     requireAdminLogin();
 
     document.getElementById('logoutBtn').addEventListener('click', () => {
+      Api.logAction('logout').catch(() => {});
       Auth.clearSession();
       window.location.href = '../login.html';
     });
@@ -94,7 +96,7 @@
                 <span class="promo-info-value">${m.venue}</span>
               </div>` : ''}
             </div>
-            <div class="promo-status-badge promo-status-${m.status}">${m.status}</div>
+            <div class="promo-status-badge promo-status-${m.status}">${m.status}${m.status === 'upcoming' ? `<br><span style="font-size:10px;">Deadline: ${formatIST(m.selection_deadline)}</span>` : ''}</div>
           </div>
         `).join('');
 
@@ -212,6 +214,47 @@
       `;
     }
 
+    async function renderAuditLog(container) {
+      try {
+        const logs = await Api.getAuditLogs(500, 0);
+        if (!logs || logs.length === 0) {
+          container.innerHTML = '<div class="card"><p>No audit log entries yet.</p></div>';
+          return;
+        }
+        container.innerHTML = `
+          <div class="card" style="padding:0; overflow-x:auto;">
+            <table class="admin-table" style="width:100%; border-collapse:collapse;">
+              <thead>
+                <tr>
+                  <th>Timestamp (IST)</th>
+                  <th>User</th>
+                  <th>Action</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${logs.map(log => `
+                  <tr>
+                    <td style="white-space:nowrap;">${formatIST(log.created_at)}</td>
+                    <td>${escHtml(log.user_name)}</td>
+                    <td>${escHtml(log.action)}</td>
+                    <td>${escHtml(log.details || '')}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `;
+      } catch (err) {
+        container.innerHTML = `<div class="card"><p class="error-msg">${err.message}</p></div>`;
+      }
+    }
+
+    function escHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
     // Match status filter tabs (Upcoming / Completed)
     document.querySelectorAll('#matchStatusTabs a[data-ftab]').forEach(tab => {
       tab.addEventListener('click', (e) => {
@@ -233,9 +276,15 @@
         const container = document.getElementById('matchList');
         if (tabName === 'leaderboard') {
           document.getElementById('matchStatusTabs').style.display = 'none';
+          document.getElementById('createMatchCard').style.display = 'none';
           renderOverallLeaderboard(container);
+        } else if (tabName === 'audit') {
+          document.getElementById('matchStatusTabs').style.display = 'none';
+          document.getElementById('createMatchCard').style.display = 'none';
+          renderAuditLog(container);
         } else {
           document.getElementById('matchStatusTabs').style.display = 'flex';
+          document.getElementById('createMatchCard').style.display = 'block';
           loadMatches();
         }
       });

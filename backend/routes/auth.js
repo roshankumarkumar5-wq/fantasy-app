@@ -84,6 +84,11 @@ router.post('/login', async (req, res) => {
   }
 
   const token = issueToken(user);
+  // Audit log
+  await supabase.from('audit_logs').insert({
+    user_id: user.id, user_name: user.full_name, action: 'login', details: null
+  }).catch(() => {});
+
   res.json({
     token,
     user: { id: user.id, email: user.email, full_name: user.full_name, role: user.role }

@@ -165,6 +165,13 @@ router.post('/', requireAuth, async (req, res) => {
   const { error: insertErr } = await supabase.from('user_team_players').insert(rows);
   if (insertErr) return res.status(500).json({ error: insertErr.message });
 
+  // Audit log
+  await supabase.from('audit_logs').insert({
+    user_id: userId, user_name: req.user.email || 'Unknown',
+    action: 'team_submit',
+    details: `match_id:${match_id}`
+  }).catch(() => {});
+
   res.json({ success: true, user_team_id: userTeam.id });
 });
 

@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Select Team - Fantasy App</title>
-<link rel="stylesheet" href="css/style.css?v=1785288629">
+<link rel="stylesheet" href="css/style.css?v=1785289715">
 </head>
 <body class="team-select-bg">
   <div class="topbar">
@@ -40,7 +40,7 @@
   </div>
 
   <script>window.API_BASE_URL = 'https://fantasy-app-backend-znyu.onrender.com/api';</script>
-  <script src="js/api.js?v=1785288629"></script>
+  <script src="js/api.js?v=1785289715"></script>
   <script>
     requireLogin();
 
@@ -300,9 +300,12 @@ function updateStickyOffsets() {
       const { special_rules } = matchData;
       document.getElementById('playerList').style.display = 'none';
       document.getElementById('countsBar').style.display = 'none';
-      // Keep the sticky action row visible so the button stays frozen at the
-      // top, just clear the role tabs since they don't apply here.
-      document.getElementById('roleTabs').innerHTML = '';
+      // Hide the sticky row and move the action button into the special card
+      document.getElementById('tabsRow').style.display = 'none';
+      const btn = document.getElementById('actionBtn');
+      const specialCard = document.querySelector('#specialStep .card');
+      specialCard.insertBefore(btn, specialCard.firstChild);
+      btn.style.marginTop = '0';
       document.getElementById('specialStep').style.display = 'block';
 
       document.getElementById('specialHint').textContent =
@@ -386,6 +389,11 @@ function updateStickyOffsets() {
           container.innerHTML = '';
           document.getElementById('countsBar').style.display = 'flex';
           document.getElementById('tabsRow').style.display = 'flex';
+          // Move action button back to tabsRow
+          if (document.getElementById('specialStep').querySelector('#actionBtn')) {
+            document.getElementById('roleTabs').after(document.getElementById('actionBtn'));
+            document.getElementById('actionBtn').style.marginTop = '';
+          }
           renderCountsBar();
           updateStickyOffsets();
           renderRoleTabs();

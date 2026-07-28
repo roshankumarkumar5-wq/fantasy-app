@@ -92,7 +92,11 @@ const Api = {
   listAllUsers: () => apiRequest('/admin/users'),
   approveUser: (id) => apiRequest(`/admin/users/${id}/approve`, { method: 'PUT' }),
   rejectUser: (id) => apiRequest(`/admin/users/${id}/reject`, { method: 'PUT' }),
-  resetUserPassword: (id, newPassword) => apiRequest(`/admin/users/${id}/reset-password`, { method: 'PUT', body: { new_password: newPassword || undefined } })
+  resetUserPassword: (id, newPassword) => apiRequest(`/admin/users/${id}/reset-password`, { method: 'PUT', body: { new_password: newPassword || undefined } }),
+
+  // Audit
+  logAction: (action, details) => apiRequest('/audit/log', { method: 'POST', body: { action, details } }),
+  getAuditLogs: (limit, offset) => apiRequest(`/admin/audit-logs?limit=${limit || 200}&offset=${offset || 0}`)
 };
 
 // Redirect to login if not authenticated - call at top of protected pages

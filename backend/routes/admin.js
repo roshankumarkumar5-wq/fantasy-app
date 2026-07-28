@@ -614,4 +614,17 @@ router.put('/users/:id/reset-password', async (req, res) => {
   res.json({ ...data, new_password });
 });
 
+// GET /api/admin/audit-logs - list all audit logs newest first
+router.get('/audit-logs', async (req, res) => {
+  const { limit = 200, offset = 0 } = req.query;
+  const { data, error } = await supabase
+    .from('audit_logs')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .range(Number(offset), Number(offset) + Number(limit) - 1);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
 export default router;
