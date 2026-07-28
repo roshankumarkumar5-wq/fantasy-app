@@ -544,6 +544,15 @@ function updateStickyOffsets() {
           });
         }
 
+        // If returning after already submitting, show submitters list by default
+        if (existing.team) {
+          document.getElementById('countsBar').style.display = 'none';
+          document.getElementById('tabsRow').style.display = 'none';
+          document.getElementById('bgLogoLayer').style.display = 'none';
+          showSubmitters();
+          return;
+        }
+
         renderCountsBar();
 updateStickyOffsets();
         renderRoleTabs();
