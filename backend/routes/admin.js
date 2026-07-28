@@ -126,8 +126,14 @@ router.post('/matches', async (req, res) => {
     return res.status(400).json({ error: 'Team A and Team B must be different teams' });
   }
 
+  const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
   const matchDate = new Date(match_date);
-  const selectionDeadline = new Date(matchDate.getTime() - 60 * 60 * 1000); // 1 hour before
+  // Deadline is 23:59 IST on the day before the match
+  const istTime = matchDate.getTime() + IST_OFFSET_MS;
+  const istDate = new Date(istTime);
+  const selectionDeadline = new Date(
+    Date.UTC(istDate.getUTCFullYear(), istDate.getUTCMonth(), istDate.getUTCDate() - 1, 23, 59, 0) - IST_OFFSET_MS
+  );
 
   const { data, error } = await supabase
     .from('matches')

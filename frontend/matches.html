@@ -11,8 +11,14 @@
     <h1>Matches</h1>
     <button id="logoutBtn">Log Out</button>
   </div>
-  <div class="container" id="matchList">
-    <div class="card"><p>Loading matches...</p></div>
+  <div class="container">
+    <div class="tab-nav" id="tabs">
+      <a href="#" class="active" data-tab="upcoming">Upcoming</a>
+      <a href="#" data-tab="completed">Completed</a>
+    </div>
+    <div id="matchList">
+      <div class="card"><p>Loading matches...</p></div>
+    </div>
   </div>
 
   <script>window.API_BASE_URL = 'https://fantasy-app-backend-znyu.onrender.com/api';</script>
@@ -36,20 +42,24 @@
       return `<div class="promo-team-logo-fallback">${(team?.short_code || '?').slice(0, 3)}</div>`;
     }
 
-    async function loadMatches() {
-      const container = document.getElementById('matchList');
-      try {
-        const matches = await Api.getMatches();
-        if (matches.length === 0) {
-          container.innerHTML = '<div class="card"><p>No matches scheduled yet.</p></div>';
-          return;
-        }
-        container.innerHTML = matches.map(m => {
-          const target = m.status === 'completed'
-            ? `results.html?matchId=${m.id}`
-            : `team-select.html?matchId=${m.id}`;
+    let currentTab = 'upcoming';
+    let allMatches = [];
 
-          return `
+    function renderMatches() {
+      const container = document.getElementById('matchList');
+      const filtered = allMatches.filter(m => currentTab === 'completed' ? m.status === 'completed' : m.status !== 'completed');
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<div class="card"><p>No ${currentTab} matches.</p></div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map(m => {
+        const target = m.status === 'completed'
+          ? `results.html?matchId=${m.id}`
+          : `team-select.html?matchId=${m.id}`;
+
+        return `
           <div class="promo-card" data-target="${target}" data-match-id="${m.id}">
             ${m.match_format ? `<div class="promo-format-tag">${m.match_format}</div>` : ''}
             <div class="promo-teams">
@@ -77,13 +87,30 @@
             <div class="promo-status-badge promo-status-${m.status}">${statusLabel(m.status)}</div>
           </div>
         `;
-        }).join('');
+      }).join('');
 
-        document.querySelectorAll('.promo-card').forEach(card => {
-          card.addEventListener('click', () => {
-            window.location.href = card.dataset.target;
-          });
+      document.querySelectorAll('.promo-card').forEach(card => {
+        card.addEventListener('click', () => {
+          window.location.href = card.dataset.target;
         });
+      });
+    }
+
+    document.querySelectorAll('#tabs a').forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        e.preventDefault();
+        document.querySelectorAll('#tabs a').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        currentTab = tab.dataset.tab;
+        renderMatches();
+      });
+    });
+
+    async function loadMatches() {
+      const container = document.getElementById('matchList');
+      try {
+        allMatches = await Api.getMatches();
+        renderMatches();
       } catch (err) {
         container.innerHTML = `<div class="card"><p class="error-msg">${err.message}</p></div>`;
       }

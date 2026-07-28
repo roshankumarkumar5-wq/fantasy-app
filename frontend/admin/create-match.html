@@ -21,7 +21,7 @@
 
       <label>Match Date &amp; Time (IST)</label>
       <input type="datetime-local" id="matchDate">
-      <p class="match-meta">Enter this in Indian Standard Time. Selection will automatically close 1 hour before this time - no need to set that separately.</p>
+      <p class="match-meta">Enter this in Indian Standard Time. Selection will automatically close at 11:59 PM on the day before this match - no need to set that separately.</p>
 
       <label>Venue (optional)</label>
       <input type="text" id="venue" placeholder="e.g. Kabilan Green Field Turf, Chennai">
@@ -145,7 +145,11 @@
 
         createdMatchId = match.id;
         document.getElementById('nextStepsCard').style.display = 'block';
-        msg.innerHTML = `<p class="success-msg">Match created for ${formatIST(matchDateUtc)}. Selection closes ${formatIST(new Date(new Date(matchDateUtc).getTime() - 60*60*1000).toISOString())}.</p>`;
+        const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
+        const matchMs = new Date(matchDateUtc).getTime();
+        const istDate = new Date(matchMs + IST_OFFSET_MS);
+        const deadlineUtc = new Date(Date.UTC(istDate.getUTCFullYear(), istDate.getUTCMonth(), istDate.getUTCDate() - 1, 23, 59, 0) - IST_OFFSET_MS).toISOString();
+        msg.innerHTML = `<p class="success-msg">Match created for ${formatIST(matchDateUtc)}. Selection closes ${formatIST(deadlineUtc)}.</p>`;
       } catch (err) {
         msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
       }
