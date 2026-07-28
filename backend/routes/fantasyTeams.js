@@ -25,7 +25,7 @@ router.post('/', requireAuth, async (req, res) => {
   // 1. Load match + rules
   const { data: match, error: matchErr } = await supabase
     .from('matches')
-    .select('id, squad_size, selection_deadline, status, team_a_id, team_b_id')
+    .select('id, squad_size, selection_deadline, status, team_a_id, team_b_id, team_a:real_teams!team_a_id(name, short_code), team_b:real_teams!team_b_id(name, short_code)')
     .eq('id', match_id)
     .single();
 
@@ -166,7 +166,10 @@ router.post('/', requireAuth, async (req, res) => {
   if (insertErr) return res.status(500).json({ error: insertErr.message });
 
   // Audit log
-  try { await supabase.from('audit_logs').insert({ user_id: userId, user_name: req.user.email || 'Unknown', action: 'team_submit', details: `match_id:${match_id}` }); } catch (_) {}
+  const teamA = match.team_a?.short_code || '?';
+  const teamB = match.team_b?.short_code || '?';
+  const dateStr = new Date(match.selection_deadline).toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' });
+  try { await supabase.from('audit_logs').insert({ user_id: userId, user_name: req.user.email || 'Unknown', action: 'team_submit', details: `${teamA} vs ${teamB} on ${dateStr}` }); } catch (_) {}
 
   res.json({ success: true, user_team_id: userTeam.id });
 });

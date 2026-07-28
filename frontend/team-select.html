@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Select Team - Fantasy App</title>
-<link rel="stylesheet" href="css/style.css?v=1785291798">
+<link rel="stylesheet" href="css/style.css?v=1785292223">
 </head>
 <body class="team-select-bg">
   <div class="topbar">
@@ -40,7 +40,7 @@
   </div>
 
   <script>window.API_BASE_URL = 'https://fantasy-app-backend-znyu.onrender.com/api';</script>
-  <script src="js/api.js?v=1785291798"></script>
+  <script src="js/api.js?v=1785292223"></script>
   <script>
     requireLogin();
 
@@ -533,7 +533,7 @@ function updateStickyOffsets() {
         if (existing.team) {
           document.getElementById('countsBar').style.display = 'none';
           document.getElementById('tabsRow').style.display = 'none';
-        window.location.href = 'matches.html';
+          showSubmitters();
           return;
         }
 
