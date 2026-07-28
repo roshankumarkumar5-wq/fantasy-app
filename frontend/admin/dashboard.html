@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Admin Dashboard</title>
-<link rel="stylesheet" href="../css/style.css?v=1785291241">
+<link rel="stylesheet" href="../css/style.css?v=1785291798">
   </head>
 <body class="themed">
   <div class="topbar">
@@ -38,7 +38,7 @@
   </div>
 
   <script>window.API_BASE_URL = 'https://fantasy-app-backend-znyu.onrender.com/api';</script>
-  <script src="../js/api.js?v=1785291241"></script>
+  <script src="../js/api.js?v=1785291798"></script>
   <script>
     requireAdminLogin();
 
@@ -223,30 +223,33 @@
         }
         container.innerHTML = `
           <div class="card" style="padding:0; overflow-x:auto;">
-            <table class="admin-table" style="width:100%; border-collapse:collapse;">
+            <table class="admin-table" style="width:100%; border-collapse:collapse; table-layout:auto;">
               <colgroup>
-                <col style="width:170px;">
-                <col style="width:160px;">
-                <col style="width:100px;">
-                <col>
+                <col style="min-width:95px;">
+                <col style="min-width:120px;">
+                <col style="min-width:70px;">
+                <col style="min-width:100px;">
               </colgroup>
               <thead>
                 <tr>
-                  <th>Timestamp (IST)</th>
+                  <th>Timestamp</th>
                   <th>User</th>
                   <th>Action</th>
                   <th>Details</th>
                 </tr>
               </thead>
               <tbody>
-                ${logs.map(log => `
+                ${logs.map(log => {
+                  const ts = new Date(log.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+                  const parts = ts.split(', ');
+                  return `
                   <tr>
-                    <td style="white-space:nowrap; font-size:12px;">${formatIST(log.created_at)}</td>
+                    <td style="font-size:12px; line-height:1.4;">${parts[0]}<br>${parts[1] || ''}</td>
                     <td style="word-break:break-word;">${escHtml(log.user_name)}</td>
                     <td>${escHtml(log.action)}</td>
                     <td style="word-break:break-word;">${escHtml(log.details || '')}</td>
-                  </tr>
-                `).join('')}
+                  </tr>`;
+                }).join('')}
               </tbody>
             </table>
           </div>
