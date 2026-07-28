@@ -25,6 +25,11 @@
       <a href="create-match.html"><button class="btn">+ Schedule a Match</button></a>
     </div>
 
+    <div class="tab-nav" id="matchStatusTabs">
+      <a href="#" class="active" data-ftab="upcoming">Upcoming</a>
+      <a href="#" data-ftab="completed">Completed</a>
+    </div>
+
     <div id="matchList"><div class="card"><p>Loading matches...</p></div></div>
   </div>
 
@@ -40,6 +45,8 @@
 
     let overallData = [];
     let viewedTeams = {};
+    let currentFilterTab = 'upcoming';
+    let allMatches = [];
 
     function teamLogo(team) {
       if (team?.logo_url) {
@@ -51,13 +58,15 @@
     async function loadMatches() {
       const container = document.getElementById('matchList');
       document.getElementById('createMatchCard').style.display = 'block';
+      document.getElementById('matchStatusTabs').style.display = 'flex';
       try {
-        const matches = await Api.getMatches();
-        if (matches.length === 0) {
-          container.innerHTML = '<div class="card"><p>No matches yet.</p></div>';
+        allMatches = await Api.getMatches();
+        const filtered = allMatches.filter(m => currentFilterTab === 'completed' ? m.status === 'completed' : m.status !== 'completed');
+        if (filtered.length === 0) {
+          container.innerHTML = `<div class="card"><p>No ${currentFilterTab} matches.</p></div>`;
           return;
         }
-        container.innerHTML = matches.map(m => `
+        container.innerHTML = filtered.map(m => `
           <div class="promo-card" data-match-id="${m.id}">
             ${m.match_format ? `<div class="promo-format-tag">${m.match_format}</div>` : ''}
             <div class="promo-teams">
@@ -200,7 +209,18 @@
       `;
     }
 
-    // Tab switching
+    // Match status filter tabs (Upcoming / Completed)
+    document.querySelectorAll('#matchStatusTabs a[data-ftab]').forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        e.preventDefault();
+        document.querySelectorAll('#matchStatusTabs a[data-ftab]').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        currentFilterTab = tab.dataset.ftab;
+        loadMatches();
+      });
+    });
+
+    // Admin section tabs (Matches / Leaderboard)
     document.querySelectorAll('#adminTabs a[data-tab]').forEach(tab => {
       tab.addEventListener('click', (e) => {
         e.preventDefault();
@@ -209,8 +229,10 @@
         const tabName = tab.dataset.tab;
         const container = document.getElementById('matchList');
         if (tabName === 'leaderboard') {
+          document.getElementById('matchStatusTabs').style.display = 'none';
           renderOverallLeaderboard(container);
         } else {
+          document.getElementById('matchStatusTabs').style.display = 'flex';
           loadMatches();
         }
       });

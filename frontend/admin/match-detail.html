@@ -13,61 +13,82 @@
     <button onclick="window.location.href='dashboard.html'">Back</button>
   </div>
   <div class="container">
-    <div class="card" id="matchSummary"><p>Loading...</p></div>
+    <div id="matchSummary"></div>
 
-    <div class="card">
-      <h3>1. Lock Selections</h3>
-      <p class="match-meta">Selection closes automatically at 11:59 PM on the day before the match (no manual action needed for that). Use this button if you want to lock it early for any reason.</p>
-      <button class="btn" id="lockBtn">Lock Match</button>
-      <div id="lockMsg"></div>
+    <div class="tab-nav" id="detailTabs" style="margin-top:12px;">
+      <button class="active" data-tab="lock">Lock</button>
+      <button data-tab="scoresheet">Scoresheet</button>
+      <button data-tab="stats">Stats</button>
+      <button data-tab="finalize">Finalize</button>
+      <button data-tab="leaderboard">Leaderboard</button>
+      <button data-tab="danger">Danger Zone</button>
     </div>
 
-    <div class="card">
-      <h3>2. Upload Scoresheet PDF (generates a CSV for you)</h3>
-      <p class="match-meta">Upload the official match scoresheet PDF. It's stored for your records, and best-effort parsed into a CSV of runs/wickets/catches/stumpings/run-outs per player (works well with CricHeroes-style scorecards). Player names are the key — download the CSV, fix anything that looks wrong in Excel, then upload it in step 3.</p>
-      <div id="currentScoresheet"></div>
-      <input type="file" id="scoresheetFile" accept="application/pdf">
-      <button class="btn secondary" id="uploadScoresheetBtn">Upload &amp; Generate CSV</button>
-      <div id="scoresheetMsg"></div>
-      <button class="btn" id="downloadGeneratedCsvBtn" style="display:none;">Download Generated CSV</button>
+    <div id="tabLock" class="tab-panel active">
+      <div class="card">
+        <h3>Lock Selections</h3>
+        <p class="match-meta">Selection closes automatically at 11:59 PM on the day before the match (no manual action needed for that). Use this button if you want to lock it early for any reason.</p>
+        <button class="btn" id="lockBtn">Lock Match</button>
+        <div id="lockMsg"></div>
+      </div>
     </div>
 
-    <div class="card">
-      <h3>3. Upload Final Stats CSV</h3>
-      <p class="match-meta">Upload the CSV — either the one generated in step 2 (edited/corrected), or one you build yourself. Columns: <code>player_name, player_id, runs, balls_faced, fours, sixes, is_out, wickets, bowled_lbw_wickets, maidens, overs_bowled, runs_conceded, catches, stumpings, run_outs, run_out_assists</code> (player_id is optional — matching is done by name; is_out should be <code>true</code> or <code>false</code>; overs_bowled uses cricket notation e.g. 3.4 = 3 overs and 4 balls; run_outs = direct hit by one fielder, run_out_assists = combined run-out with 2+ fielders involved). This is what unlocks the Finalize step below.</p>
-      <input type="file" id="statsCsvFile" accept=".csv">
-      <button class="btn" id="uploadStatsCsvBtn">Upload Stats CSV</button>
-      <div id="statsCsvMsg"></div>
+    <div id="tabScoresheet" class="tab-panel">
+      <div class="card">
+        <h3>Upload Scoresheet PDF (generates a CSV for you)</h3>
+        <p class="match-meta">Upload the official match scoresheet PDF. It's stored for your records, and best-effort parsed into a CSV of runs/wickets/catches/stumpings/run-outs per player (works well with CricHeroes-style scorecards). Player names are the key — download the CSV, fix anything that looks wrong in Excel, then upload it in step 3.</p>
+        <div id="currentScoresheet"></div>
+        <input type="file" id="scoresheetFile" accept="application/pdf">
+        <button class="btn secondary" id="uploadScoresheetBtn">Upload &amp; Generate CSV</button>
+        <div id="scoresheetMsg"></div>
+        <button class="btn" id="downloadGeneratedCsvBtn" style="display:none;">Download Generated CSV</button>
+      </div>
     </div>
 
-    <div class="card">
-      <h3>Or enter stats manually</h3>
-      <p class="match-meta">Alternative to the CSV upload above — add a row per player and pick them by name.</p>
-      <div id="statsRows"></div>
-      <button class="btn secondary" id="addStatsRowBtn">+ Add Player Row</button>
-      <button class="btn secondary" id="saveStatsBtn">Save Manual Rows</button>
-      <div id="statsMsg"></div>
+    <div id="tabStats" class="tab-panel">
+      <div class="card">
+        <h3>Upload Final Stats CSV</h3>
+        <p class="match-meta">Upload the CSV — either the one generated in step 2 (edited/corrected), or one you build yourself. Columns: <code>player_name, player_id, runs, balls_faced, fours, sixes, is_out, wickets, bowled_lbw_wickets, maidens, overs_bowled, runs_conceded, catches, stumpings, run_outs, run_out_assists</code> (player_id is optional — matching is done by name; is_out should be <code>true</code> or <code>false</code>; overs_bowled uses cricket notation e.g. 3.4 = 3 overs and 4 balls; run_outs = direct hit by one fielder, run_out_assists = combined run-out with 2+ fielders involved). This is what unlocks the Finalize step below.</p>
+        <input type="file" id="statsCsvFile" accept=".csv">
+        <button class="btn" id="uploadStatsCsvBtn">Upload Stats CSV</button>
+        <div id="statsCsvMsg"></div>
+      </div>
+
+      <div class="card">
+        <h3>Or enter stats manually</h3>
+        <p class="match-meta">Alternative to the CSV upload above — add a row per player and pick them by name.</p>
+        <div id="statsRows"></div>
+        <button class="btn secondary" id="addStatsRowBtn">+ Add Player Row</button>
+        <button class="btn secondary" id="saveStatsBtn">Save Manual Rows</button>
+        <div id="statsMsg"></div>
+      </div>
     </div>
 
-    <div class="card">
-      <h3>4. Finalize Match &amp; Compute Points</h3>
-      <p class="match-meta">Calculates every user's team total and marks the match completed. Blocked until final stats have been saved or uploaded (step 3 or the manual entry above).</p>
-      <button class="btn" id="finalizeBtn">Finalize Match</button>
-      <div id="finalizeMsg"></div>
+    <div id="tabFinalize" class="tab-panel">
+      <div class="card">
+        <h3>Finalize Match &amp; Compute Points</h3>
+        <p class="match-meta">Calculates every user's team total and marks the match completed. Blocked until final stats have been saved or uploaded (step 3 or the manual entry above).</p>
+        <button class="btn" id="finalizeBtn">Finalize Match</button>
+        <div id="finalizeMsg"></div>
+      </div>
     </div>
 
-    <div class="card">
-      <h3>Leaderboard</h3>
-      <button class="btn secondary" id="loadLeaderboardBtn">Refresh Leaderboard</button>
-      <button class="btn secondary" id="downloadLeaderboardBtn" style="display:none;">Download CSV</button>
-      <div id="leaderboard"></div>
+    <div id="tabLeaderboard" class="tab-panel">
+      <div class="card">
+        <h3>Leaderboard</h3>
+        <button class="btn secondary" id="loadLeaderboardBtn">Refresh Leaderboard</button>
+        <button class="btn secondary" id="downloadLeaderboardBtn" style="display:none;">Download CSV</button>
+        <div id="leaderboard"></div>
+      </div>
     </div>
 
-    <div class="card" id="deleteCard" style="display:none;">
-      <h3 style="color:#dc2626;">Danger Zone</h3>
-      <p class="match-meta">Permanently deletes this match and all associated user teams, stats, and leaderboard data. Only available for completed matches.</p>
-      <button class="btn" id="deleteMatchBtn" style="background:#dc2626;">Delete This Match</button>
-      <div id="deleteMsg"></div>
+    <div id="tabDanger" class="tab-panel">
+      <div class="card" id="deleteCard" style="display:none;">
+        <h3 style="color:#dc2626;">Danger Zone</h3>
+        <p class="match-meta">Permanently deletes this match and all associated user teams, stats, and leaderboard data. Only available for completed matches.</p>
+        <button class="btn" id="deleteMatchBtn" style="background:#dc2626;">Delete This Match</button>
+        <div id="deleteMsg"></div>
+      </div>
     </div>
   </div>
 
@@ -83,6 +104,16 @@
     let lastLeaderboard = [];
     let currentMatchLabel = '';
     let generatedCsvContent = null;
+
+    // ---- Tab switching ----
+    document.querySelectorAll('#detailTabs button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('#detailTabs button').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab' + btn.dataset.tab.charAt(0).toUpperCase() + btn.dataset.tab.slice(1)).classList.add('active');
+      });
+    });
 
     function downloadTextFile(filename, content, mime) {
       const blob = new Blob([content], { type: mime });
@@ -105,17 +136,19 @@
         currentMatchLabel = `${m.team_a?.short_code || '?'}-vs-${m.team_b?.short_code || '?'}`;
 
         el.innerHTML = `
-          <h3>${m.team_a?.short_code || '?'} vs ${m.team_b?.short_code || '?'}</h3>
-          <p class="match-meta">Match: ${formatIST(m.match_date)}</p>
-          <p class="match-meta">Selection closes: ${formatIST(m.selection_deadline)}</p>
-          <p class="match-meta">Squad size: ${m.squad_size} (4-7 players per team)</p>
-          ${m.venue ? `<p class="match-meta">Venue: ${m.venue}</p>` : ''}
-          ${m.match_format ? `<p class="match-meta">Format: ${m.match_format}</p>` : ''}
-          <p class="match-meta">Special players: ${data.special_rules.enabled ? 'Enabled (' + data.special_rules.multipliers.join('x, ') + 'x)' : 'Disabled'}</p>
-          <p class="match-meta">Credit limit: ${data.credit_rules?.enabled ? 'Enabled (max ' + Number(data.credit_rules.max_credits).toFixed(1) + ')' : 'Disabled'}</p>
-          <span class="status-badge status-${m.status}">${m.status}</span>
-          <p class="match-meta" style="margin-top:8px;">${data.players.length} player(s) available (auto-derived from both teams' rosters)</p>
-          <p class="match-meta">Final stats: ${m.stats_confirmed_at ? '<span class="success-msg" style="display:inline">Confirmed ✓ (' + formatIST(m.stats_confirmed_at) + ')</span>' : 'Not yet saved/uploaded'}</p>
+          <div class="card">
+            <h3>${m.team_a?.short_code || '?'} vs ${m.team_b?.short_code || '?'}</h3>
+            <p class="match-meta">Match: ${formatIST(m.match_date)}</p>
+            <p class="match-meta">Selection closes: ${formatIST(m.selection_deadline)}</p>
+            <p class="match-meta">Squad size: ${m.squad_size} (4-7 players per team)</p>
+            ${m.venue ? `<p class="match-meta">Venue: ${m.venue}</p>` : ''}
+            ${m.match_format ? `<p class="match-meta">Format: ${m.match_format}</p>` : ''}
+            <p class="match-meta">Special players: ${data.special_rules.enabled ? 'Enabled (' + data.special_rules.multipliers.join('x, ') + 'x)' : 'Disabled'}</p>
+            <p class="match-meta">Credit limit: ${data.credit_rules?.enabled ? 'Enabled (max ' + Number(data.credit_rules.max_credits).toFixed(1) + ')' : 'Disabled'}</p>
+            <span class="status-badge status-${m.status}">${m.status}</span>
+            <p class="match-meta" style="margin-top:8px;">${data.players.length} player(s) available (auto-derived from both teams' rosters)</p>
+            <p class="match-meta">Final stats: ${m.stats_confirmed_at ? '<span class="success-msg" style="display:inline">Confirmed ✓ (' + formatIST(m.stats_confirmed_at) + ')</span>' : 'Not yet saved/uploaded'}</p>
+          </div>
         `;
 
         document.querySelectorAll('.stat-player-select').forEach(populatePlayerSelect);
@@ -144,7 +177,7 @@
       }
     });
 
-    // ---- Step 2: Upload scoresheet PDF, get generated CSV back ----
+    // ---- Scoresheet upload ----
     document.getElementById('uploadScoresheetBtn').addEventListener('click', async () => {
       const msg = document.getElementById('scoresheetMsg');
       const downloadBtn = document.getElementById('downloadGeneratedCsvBtn');
@@ -184,7 +217,7 @@
       downloadTextFile(`stats-${currentMatchLabel || matchId}.csv`, generatedCsvContent, 'text/csv');
     });
 
-    // ---- Step 3: Upload final stats CSV ----
+    // ---- Stats CSV upload ----
     document.getElementById('uploadStatsCsvBtn').addEventListener('click', async () => {
       const msg = document.getElementById('statsCsvMsg');
       const fileInput = document.getElementById('statsCsvFile');
@@ -207,7 +240,7 @@
       }
     });
 
-    // ---- Manual entry (fallback) ----
+    // ---- Manual stats entry ----
     function populatePlayerSelect(selectEl) {
       const options = ['<option value="">Select a player</option>']
         .concat(matchPlayers.map(p => `<option value="${p.id}">${p.name} (${p.role})</option>`));

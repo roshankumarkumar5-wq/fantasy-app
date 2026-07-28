@@ -51,8 +51,8 @@ router.post('/', requireAuth, async (req, res) => {
 
   if (specialRules?.enabled) {
     const maxSpecial = specialRules.multipliers.length;
-    if (special_picks.length === 0) {
-      return res.status(400).json({ error: 'You must select at least one special player' });
+    if (special_picks.length < maxSpecial) {
+      return res.status(400).json({ error: `You must select all ${maxSpecial} special player(s) (rank 1 and 2)` });
     }
     if (special_picks.length > maxSpecial) {
       return res.status(400).json({ error: `Only ${maxSpecial} special player(s) allowed for this match` });

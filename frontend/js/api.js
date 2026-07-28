@@ -56,6 +56,7 @@ async function apiRequest(path, { method = 'GET', body = null, isFormData = fals
 const Api = {
   signup: (payload) => apiRequest('/auth/signup', { method: 'POST', body: payload }),
   login: (payload) => apiRequest('/auth/login', { method: 'POST', body: payload }),
+  changePassword: (payload) => apiRequest('/auth/change-password', { method: 'POST', body: payload }),
 
   getMatches: () => apiRequest('/matches'),
   getMatch: (id) => apiRequest(`/matches/${id}`),

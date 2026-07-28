@@ -77,6 +77,8 @@ body {
   z-index: 12;
 }
 .topbar h1 { font-size: 18px; margin: 0; }
+.topbar-link { color: white; font-size: 13px; text-decoration: none; opacity: 0.85; margin-right: 8px; }
+.topbar-link:hover { opacity: 1; text-decoration: underline; }
 .topbar button {
   background: rgba(255,255,255,0.15);
   border: none;
@@ -288,12 +290,12 @@ body.team-select-bg .topbar {
   margin-left: 6px;
 }
 
-table.admin-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-table.admin-table th, table.admin-table td { border: 1px solid var(--border); padding: 8px; text-align: left; }
+table.admin-table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; }
+table.admin-table th, table.admin-table td { border: 1px solid var(--border); padding: 8px; text-align: left; word-break: break-word; overflow-wrap: break-word; }
 table.admin-table th { background: #eef1f6; }
 
 .tab-nav { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
-.tab-nav a {
+.tab-nav a, .tab-nav button {
   padding: 8px 14px;
   border-radius: 8px;
   background: var(--card-bg);
@@ -301,8 +303,13 @@ table.admin-table th { background: #eef1f6; }
   color: var(--text);
   text-decoration: none;
   font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
 }
-.tab-nav a.active { background: var(--primary); color: white; }
+.tab-nav a.active, .tab-nav button.active { background: var(--primary); color: white; }
+
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
 
 /* ============================================================
    Match promo card - team logos, VS, info boxes

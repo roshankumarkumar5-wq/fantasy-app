@@ -309,9 +309,11 @@ function updateStickyOffsets() {
           btn.textContent = 'Continue';
         }
       } else {
+        const { multipliers } = matchData.special_rules;
         const picked = specialAssignments.size;
-        btn.disabled = picked === 0;
-        btn.textContent = picked === 0 ? 'Pick a special player' : 'Submit Team';
+        const allFilled = picked === multipliers.length;
+        btn.disabled = !allFilled;
+        btn.textContent = allFilled ? 'Submit Team' : `Assign special players (${picked}/${multipliers.length})`;
       }
     }
 
@@ -328,7 +330,7 @@ function updateStickyOffsets() {
       document.getElementById('bgLogoLayer').innerHTML = `<img src="${LBS_LOGO}" alt="">`;
 
       document.getElementById('specialHint').textContent =
-        `You can assign up to ${special_rules.multipliers.length} special player(s) from your selected squad. Tap to assign the next available multiplier slot, tap again to remove.`;
+        `Assign all ${special_rules.multipliers.length} special player(s) from your selected squad. Tap to assign the next available multiplier slot, tap again to remove.`;
 
       const squadPlayers = matchData.players.filter(p => selectedIds.has(p.id));
 
@@ -549,7 +551,7 @@ function updateStickyOffsets() {
           document.getElementById('countsBar').style.display = 'none';
           document.getElementById('tabsRow').style.display = 'none';
           document.getElementById('bgLogoLayer').style.display = 'none';
-          showSubmitters();
+        window.location.reload();
           return;
         }
 

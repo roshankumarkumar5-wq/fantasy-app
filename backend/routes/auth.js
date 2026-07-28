@@ -2,6 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { supabase } from '../db/supabase.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -87,6 +88,44 @@ router.post('/login', async (req, res) => {
     token,
     user: { id: user.id, email: user.email, full_name: user.full_name, role: user.role }
   });
+});
+
+// POST /api/auth/change-password - allows a logged-in user to set a new
+// password. Requires the current password for verification.
+router.post('/change-password', requireAuth, async (req, res) => {
+  const { current_password, new_password } = req.body;
+
+  if (!current_password || !new_password) {
+    return res.status(400).json({ error: 'current_password and new_password are required' });
+  }
+  if (new_password.length < 6) {
+    return res.status(400).json({ error: 'New password must be at least 6 characters' });
+  }
+
+  const { data: user, error: fetchErr } = await supabase
+    .from('users')
+    .select('id, password_hash')
+    .eq('id', req.user.id)
+    .single();
+
+  if (fetchErr || !user) {
+    return res.status(404).json({ error: 'User not found' });
+  }
+
+  const valid = await bcrypt.compare(current_password, user.password_hash);
+  if (!valid) {
+    return res.status(403).json({ error: 'Current password is incorrect' });
+  }
+
+  const newHash = await bcrypt.hash(new_password, 10);
+  const { error: updateErr } = await supabase
+    .from('users')
+    .update({ password_hash: newHash })
+    .eq('id', user.id);
+
+  if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+  res.json({ message: 'Password updated successfully' });
 });
 
 export default router;
