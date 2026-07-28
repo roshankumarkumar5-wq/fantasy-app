@@ -215,7 +215,7 @@ updateStickyOffsets();
           <div class="player-row ${isSelected ? 'selected' : ''}">
             <div class="player-info">
               <span class="player-name">${p.name}</span>
-              <span class="player-meta">${ROLE_LABELS[p.role] || p.role} · ${teamLabel}${credit_rules?.enabled ? ` · ${Number(p.credit_value).toFixed(1)} cr` : ''}</span>
+              <span class="player-meta">${ROLE_LABELS[p.role] || p.role} · ${teamLabel}${credit_rules?.enabled ? ` · ${Number(p.credit_value).toFixed(1)} cr` : ''}${p.accumulated_points ? ` · ${p.accumulated_points} pts` : ''}</span>
             </div>
             <div class="player-actions">
               <button class="select-btn ${isSelected ? 'added' : ''}" data-id="${p.id}" ${disabled ? 'disabled' : ''}>
@@ -429,6 +429,76 @@ function updateStickyOffsets() {
       });
     }
 
+    let viewedTeams = {};
+
+    async function loadLockedMatchView() {
+      const container = document.getElementById('playerList');
+      try {
+        const submitters = await Api.getSubmitters(matchId);
+        if (submitters.length === 0) {
+          container.innerHTML = '<div class="card"><p>Selection is closed. No teams were submitted.</p></div>';
+          return;
+        }
+        container.innerHTML = `
+          <div class="card">
+            <h3>Teams Submitted (${submitters.length})</h3>
+            <p class="match-meta">Click a user to view their team.</p>
+            ${submitters.map(s => `
+              <div class="player-row" style="cursor:pointer; margin-bottom:4px;" data-user-id="${s.user_id}" data-user-name="${s.full_name}">
+                <span style="font-weight:600; font-size:14px; color:var(--primary);">${s.full_name}</span>
+              </div>
+              <div class="other-team-panel" id="lockedTeam-${s.user_id}" style="display:none; padding:8px 0 8px 16px;"></div>
+            `).join('')}
+            <button class="btn secondary" onclick="window.location.href='matches.html'" style="margin-top:12px;">Back to Matches</button>
+          </div>
+        `;
+
+        document.querySelectorAll('.player-row[data-user-id]').forEach(row => {
+          row.addEventListener('click', () => {
+            const uid = row.dataset.userId;
+            const name = row.dataset.userName;
+            const panel = document.getElementById(`lockedTeam-${uid}`);
+            if (panel.style.display === 'none' || !panel.innerHTML) {
+              loadOtherTeam(uid, name, panel);
+            }
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+          });
+        });
+      } catch (err) {
+        container.innerHTML = `<div class="card"><p class="error-msg">${err.message}</p></div>`;
+      }
+    }
+
+    async function loadOtherTeam(userId, userName, panel) {
+      if (viewedTeams[userId]) {
+        renderOtherTeam(viewedTeams[userId], panel);
+        return;
+      }
+      panel.innerHTML = '<p class="match-meta">Loading...</p>';
+      try {
+        const { team } = await Api.getUserTeam(matchId, userId);
+        if (!team) {
+          panel.innerHTML = '<p class="match-meta">No team submitted.</p>';
+          return;
+        }
+        viewedTeams[userId] = team;
+        renderOtherTeam(team, panel);
+      } catch (err) {
+        panel.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    }
+
+    function renderOtherTeam(team, panel) {
+      panel.innerHTML = `
+        ${team.players.map(tp => `
+          <div style="display:flex; justify-content:space-between; font-size:13px; padding:4px 0;">
+            <span>${tp.player.name}${tp.special_rank ? ` <span class="special-chip">S${tp.special_rank}</span>` : ''}</span>
+            <span style="font-weight:600;">${tp.points === null ? '—' : tp.points}</span>
+          </div>
+        `).join('')}
+      `;
+    }
+
     document.getElementById('actionBtn').addEventListener('click', () => {
       if (step === 1) {
         if (matchData.special_rules.enabled) {
@@ -450,9 +520,11 @@ function updateStickyOffsets() {
           `${matchData.match.team_a?.short_code || '?'} vs ${matchData.match.team_b?.short_code || '?'}`;
 
         if (matchData.match.status !== 'upcoming') {
-          document.getElementById('playerList').innerHTML =
-            '<div class="card">Selection is closed for this match.</div>';
+          document.getElementById('countsBar').style.display = 'none';
+          document.getElementById('tabsRow').style.display = 'none';
           document.getElementById('actionBtn').disabled = true;
+          document.getElementById('playerList').innerHTML = '<div class="card"><p>Loading teams...</p></div>';
+          loadLockedMatchView();
           return;
         }
 

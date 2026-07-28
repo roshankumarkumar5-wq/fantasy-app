@@ -82,22 +82,42 @@ router.get('/:id', requireAuth, async (req, res) => {
 
   if (playersErr) return res.status(500).json({ error: playersErr.message });
 
+  // Attach each player's accumulated points from past completed matches
+  const playerIds = players.map(p => p.id);
+  const { data: accPoints } = await supabase
+    .from('player_match_stats')
+    .select('player_id, base_points, match:match_id ( status )')
+    .in('player_id', playerIds);
+
+  const accMap = new Map();
+  for (const row of accPoints || []) {
+    if (row.match?.status === 'completed') {
+      const prev = accMap.get(row.player_id) || 0;
+      accMap.set(row.player_id, prev + Number(row.base_points));
+    }
+  }
+  const playersWithAcc = players.map(p => ({
+    ...p,
+    accumulated_points: Math.round((accMap.get(p.id) || 0) * 10) / 10
+  }));
+
   res.json({
     match,
     special_rules: specialRules || { enabled: false, multipliers: [] },
     credit_rules: creditRules || { enabled: false, max_credits: null },
-    players
+    players: playersWithAcc
   });
 });
 
 // GET /api/matches/:id/submitters - users who have submitted teams, ordered by
-// submission time (earliest first). Only returns names, no team details.
+// submission time (earliest first). Includes user_id so the frontend can fetch
+// individual team details when the match is locked or completed.
 router.get('/:id/submitters', requireAuth, async (req, res) => {
   const { id } = req.params;
 
   const { data, error } = await supabase
     .from('user_teams')
-    .select('user:user_id ( full_name ), submitted_at')
+    .select('user_id, user:user_id ( full_name ), submitted_at')
     .eq('match_id', id)
     .not('submitted_at', 'is', null)
     .order('submitted_at', { ascending: true });
@@ -105,6 +125,7 @@ router.get('/:id/submitters', requireAuth, async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
 
   res.json((data || []).map(row => ({
+    user_id: row.user_id,
     full_name: row.user?.full_name || 'Unknown',
     submitted_at: row.submitted_at
   })));

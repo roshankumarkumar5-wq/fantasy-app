@@ -182,8 +182,8 @@ router.get('/:match_id', requireAuth, async (req, res) => {
       .select('status')
       .eq('id', match_id)
       .single();
-    if (!match || match.status !== 'completed') {
-      return res.status(403).json({ error: 'You can only view other users\' teams for completed matches.' });
+    if (!match || (match.status !== 'completed' && match.status !== 'locked')) {
+      return res.status(403).json({ error: 'You can only view other users\' teams after the match is locked.' });
     }
     userId = targetUserId;
   }
