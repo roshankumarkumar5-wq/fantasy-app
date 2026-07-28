@@ -614,6 +614,14 @@ router.put('/users/:id/reset-password', async (req, res) => {
   res.json({ ...data, new_password });
 });
 
+// DELETE /api/admin/users/:id - delete a user and their teams
+router.delete('/users/:id', async (req, res) => {
+  const { id } = req.params;
+  const { error } = await supabase.from('users').delete().eq('id', id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
 // GET /api/admin/audit-logs - list all audit logs newest first
 router.get('/audit-logs', async (req, res) => {
   const { limit = 200, offset = 0 } = req.query;

@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Admin Dashboard</title>
-<link rel="stylesheet" href="../css/style.css?v=1785290280">
+<link rel="stylesheet" href="../css/style.css?v=1785291241">
   </head>
 <body class="themed">
   <div class="topbar">
@@ -38,7 +38,7 @@
   </div>
 
   <script>window.API_BASE_URL = 'https://fantasy-app-backend-znyu.onrender.com/api';</script>
-  <script src="../js/api.js?v=1785290280"></script>
+  <script src="../js/api.js?v=1785291241"></script>
   <script>
     requireAdminLogin();
 
@@ -224,6 +224,12 @@
         container.innerHTML = `
           <div class="card" style="padding:0; overflow-x:auto;">
             <table class="admin-table" style="width:100%; border-collapse:collapse;">
+              <colgroup>
+                <col style="width:170px;">
+                <col style="width:160px;">
+                <col style="width:100px;">
+                <col>
+              </colgroup>
               <thead>
                 <tr>
                   <th>Timestamp (IST)</th>
@@ -235,10 +241,10 @@
               <tbody>
                 ${logs.map(log => `
                   <tr>
-                    <td style="white-space:nowrap;">${formatIST(log.created_at)}</td>
-                    <td>${escHtml(log.user_name)}</td>
+                    <td style="white-space:nowrap; font-size:12px;">${formatIST(log.created_at)}</td>
+                    <td style="word-break:break-word;">${escHtml(log.user_name)}</td>
                     <td>${escHtml(log.action)}</td>
-                    <td>${escHtml(log.details || '')}</td>
+                    <td style="word-break:break-word;">${escHtml(log.details || '')}</td>
                   </tr>
                 `).join('')}
               </tbody>

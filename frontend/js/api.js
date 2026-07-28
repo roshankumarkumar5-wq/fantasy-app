@@ -90,6 +90,7 @@ const Api = {
   // User approvals
   listPendingUsers: () => apiRequest('/admin/users/pending'),
   listAllUsers: () => apiRequest('/admin/users'),
+  deleteUser: (id) => apiRequest(`/admin/users/${id}`, { method: 'DELETE' }),
   approveUser: (id) => apiRequest(`/admin/users/${id}/approve`, { method: 'PUT' }),
   rejectUser: (id) => apiRequest(`/admin/users/${id}/reject`, { method: 'PUT' }),
   resetUserPassword: (id, newPassword) => apiRequest(`/admin/users/${id}/reset-password`, { method: 'PUT', body: { new_password: newPassword || undefined } }),

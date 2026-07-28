@@ -7,7 +7,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Users - Admin</title>
-<link rel="stylesheet" href="../css/style.css?v=1785290280">
+<link rel="stylesheet" href="../css/style.css?v=1785291241">
   </head>
 <body class="themed">
   <script>window.API_BASE_URL = 'https://fantasy-app-backend-znyu.onrender.com/api';</script>
@@ -32,7 +32,7 @@
     <div id="usersWrap"><div class="card"><p class="match-meta">Loading...</p></div></div>
   </div>
 
-  <script src="../js/api.js?v=1785290280"></script>
+  <script src="../js/api.js?v=1785291241"></script>
   <script>
     requireAdminLogin();
 
@@ -51,20 +51,30 @@
           wrap.innerHTML = '<div class="card"><p class="match-meta">No users yet.</p></div>';
           return;
         }
+
+        // Detect duplicates by email
+        const emailCount = {};
+        rows.forEach(r => { emailCount[r.email] = (emailCount[r.email] || 0) + 1; });
+        const dupEmails = Object.keys(emailCount).filter(e => emailCount[e] > 1);
+
         wrap.innerHTML = `
           <div class="card">
+            <p style="margin-bottom:10px;"><strong>Total users:</strong> ${rows.length}${dupEmails.length ? ` &middot; <span style="color:#dc2626;">${dupEmails.length} duplicate email(s) found</span>` : ''}</p>
             <table class="admin-table">
-              <tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th><th></th></tr>
-              ${rows.map(r => `
-                <tr data-id="${r.id}">
-                  <td>${r.full_name}</td>
-                  <td>${r.email}</td>
-                  <td>${r.phone || '-'}</td>
+              <tr><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th><th></th><th></th></tr>
+              ${rows.map(r => {
+                const isDup = emailCount[r.email] > 1;
+                return `
+                <tr data-id="${r.id}"${isDup ? ' style="background:#fff0f0;"' : ''}>
+                  <td>${escHtml(r.full_name)}${isDup ? ' <span style="color:#dc2626;font-size:11px;">⚠ dup</span>' : ''}</td>
+                  <td>${escHtml(r.email)}</td>
+                  <td>${escHtml(r.phone || '-')}</td>
                   <td>${r.role}</td>
                   <td>${r.status}</td>
                   <td><button class="reset-pw-btn" data-id="${r.id}" data-name="${r.full_name}" style="background:none;border:1px solid var(--primary);color:var(--primary);border-radius:6px;padding:4px 10px;cursor:pointer;white-space:nowrap;">Reset Password</button></td>
-                </tr>
-              `).join('')}
+                  <td><button class="delete-user-btn" data-id="${r.id}" data-name="${r.full_name}" style="background:none;border:1px solid #dc2626;color:#dc2626;border-radius:6px;padding:4px 10px;cursor:pointer;white-space:nowrap;">Delete</button></td>
+                </tr>`;
+              }).join('')}
             </table>
           </div>
           <div class="card" id="resetResultCard" style="display:none;"></div>
@@ -79,9 +89,9 @@
               resultCard.style.display = 'block';
               resultCard.innerHTML = `
                 <h3>Password Reset ✓</h3>
-                <p>New password for <strong>${result.full_name}</strong> (${result.email}):</p>
+                <p>New password for <strong>${escHtml(result.full_name)}</strong> (${escHtml(result.email)}):</p>
                 <p style="font-size:22px; font-weight:700; letter-spacing:1px; background:#f4f6fb; padding:12px; border-radius:8px; text-align:center;">
-                  ${result.new_password}
+                  ${escHtml(result.new_password)}
                 </p>
                 <p class="match-meta">Share this with them directly — it won't be shown again. There's no in-app way for them to change it themselves yet, so let them know to use this as-is for now.</p>
               `;
@@ -91,9 +101,27 @@
             }
           });
         });
+
+        document.querySelectorAll('.delete-user-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            if (!confirm(`Permanently delete user "${btn.dataset.name}"? This will also delete all their teams and cannot be undone.`)) return;
+            if (!confirm(`Are you absolutely sure? This is irreversible.`)) return;
+            try {
+              await Api.deleteUser(btn.dataset.id);
+              loadUsers();
+            } catch (err) {
+              alert('Error: ' + err.message);
+            }
+          });
+        });
       } catch (err) {
         wrap.innerHTML = `<p class="error-msg">${err.message}</p>`;
       }
+    }
+
+    function escHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
     document.getElementById('refreshBtn').addEventListener('click', loadUsers);
