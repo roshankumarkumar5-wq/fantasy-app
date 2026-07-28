@@ -7,10 +7,9 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Matches - Fantasy App</title>
-<link rel="stylesheet" href="css/style.css?v=1785287515">
+<link rel="stylesheet" href="css/style.css?v=1785288014">
   </head>
 <body class="themed">
-  <div class="bg-logo-layer" id="bgLogoLayer"><img src="images/lbs-logo.png" alt=""></div>
   <div class="topbar">
     <h1>Matches</h1>
     <a href="change-password.html" class="topbar-link">Change Password</a>
@@ -28,7 +27,7 @@
   </div>
 
   <script>window.API_BASE_URL = 'https://fantasy-app-backend-znyu.onrender.com/api';</script>
-  <script src="js/api.js?v=1785287515"></script>
+  <script src="js/api.js?v=1785288014"></script>
   <script>
     requireLogin();
 
@@ -52,19 +51,6 @@
     let allMatches = [];
     let overallData = [];
     let viewedTeams = {};
-
-    function renderBgLogos() {
-      const layer = document.getElementById('bgLogoLayer');
-      if (!layer) return;
-      const logos = ['images/lbs-logo.png'];
-      const seen = new Set();
-      allMatches.forEach(m => {
-        [m.team_a?.logo_url, m.team_b?.logo_url].forEach(url => {
-          if (url && !seen.has(url)) { seen.add(url); logos.push(url); }
-        });
-      });
-      layer.innerHTML = logos.map(url => `<img src="${url}" alt="">`).join('');
-    }
 
     function renderMatches() {
       const container = document.getElementById('matchList');
@@ -240,7 +226,6 @@
       const container = document.getElementById('matchList');
       try {
         allMatches = await Api.getMatches();
-        renderBgLogos();
         renderMatches();
       } catch (err) {
         container.innerHTML = `<div class="card"><p class="error-msg">${err.message}</p></div>`;

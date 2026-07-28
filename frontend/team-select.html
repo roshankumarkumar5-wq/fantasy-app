@@ -7,10 +7,9 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Select Team - Fantasy App</title>
-<link rel="stylesheet" href="css/style.css?v=1785287515">
+<link rel="stylesheet" href="css/style.css?v=1785288014">
 </head>
 <body class="team-select-bg">
-  <div class="bg-logo-layer" id="bgLogoLayer"></div>
   <div class="topbar">
     <h1 id="matchTitle">Select Team</h1>
     <button onclick="window.location.href='matches.html'">Back</button>
@@ -41,7 +40,7 @@
   </div>
 
   <script>window.API_BASE_URL = 'https://fantasy-app-backend-znyu.onrender.com/api';</script>
-  <script src="js/api.js?v=1785287515"></script>
+  <script src="js/api.js?v=1785288014"></script>
   <script>
     requireLogin();
 
@@ -176,27 +175,6 @@ updateStickyOffsets();
       });
     }
 
-    const LBS_LOGO = 'images/lbs-logo.png';
-
-    function renderBackgroundLogo() {
-      const { match } = matchData;
-      const layer = document.getElementById('bgLogoLayer');
-      if (!layer) return;
-
-      const complete = squadValid();
-      let logos = [];
-
-      if (complete || currentTeamFilter === 'all') {
-        logos = [LBS_LOGO];
-      } else if (currentTeamFilter === match.team_a.id) {
-        logos = [match.team_a.logo_url].filter(Boolean);
-      } else if (currentTeamFilter === match.team_b.id) {
-        logos = [match.team_b.logo_url].filter(Boolean);
-      }
-
-      layer.innerHTML = logos.map(url => `<img src="${url}" alt="">`).join('');
-    }
-
     function renderPlayerList() {
       const { match, players, credit_rules } = matchData;
       const filtered = players.filter(p =>
@@ -329,9 +307,6 @@ function updateStickyOffsets() {
       document.getElementById('roleTabs').innerHTML = '';
       document.getElementById('specialStep').style.display = 'block';
 
-      // Full-page league logo backdrop for the captain/VC step
-      document.getElementById('bgLogoLayer').innerHTML = `<img src="${LBS_LOGO}" alt="">`;
-
       document.getElementById('specialHint').textContent =
         `Assign all ${special_rules.multipliers.length} special player(s) from your selected squad. Tap to assign the next available multiplier slot, tap again to remove.`;
 
@@ -397,7 +372,6 @@ function updateStickyOffsets() {
       document.getElementById('countsBar').style.display = 'none';
       document.getElementById('tabsRow').style.display = 'none';
       document.getElementById('specialStep').style.display = 'none';
-      document.getElementById('bgLogoLayer').style.display = 'none';
       Api.getSubmitters(matchId).then(submitters => {
         container.innerHTML = `
           <div class="card">
@@ -414,7 +388,6 @@ function updateStickyOffsets() {
           container.innerHTML = '';
           document.getElementById('countsBar').style.display = 'flex';
           document.getElementById('tabsRow').style.display = 'flex';
-          document.getElementById('bgLogoLayer').style.display = 'flex';
           renderCountsBar();
           updateStickyOffsets();
           renderRoleTabs();
@@ -553,8 +526,7 @@ function updateStickyOffsets() {
         if (existing.team) {
           document.getElementById('countsBar').style.display = 'none';
           document.getElementById('tabsRow').style.display = 'none';
-          document.getElementById('bgLogoLayer').style.display = 'none';
-        window.location.reload();
+          showSubmitters();
           return;
         }
 
