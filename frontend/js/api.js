@@ -67,6 +67,8 @@ const Api = {
   getPublicLeaderboard: (matchId) => apiRequest(`/matches/${matchId}/leaderboard`),
   getSubmitters: (matchId) => apiRequest(`/matches/${matchId}/submitters`),
   getOverallLeaderboard: () => apiRequest('/leaderboard/overall'),
+  getPlayerLeaderboard: () => apiRequest('/leaderboard/players'),
+  getSettings: () => apiRequest('/settings'),
 
   // Admin
   listRealTeams: () => apiRequest('/admin/teams'),
@@ -97,7 +99,11 @@ const Api = {
 
   // Audit
   logAction: (action, details) => apiRequest('/audit/log', { method: 'POST', body: { action, details } }),
-  getAuditLogs: (limit, offset) => apiRequest(`/admin/audit-logs?limit=${limit || 200}&offset=${offset || 0}`)
+  getAuditLogs: (limit, offset) => apiRequest(`/admin/audit-logs?limit=${limit || 200}&offset=${offset || 0}`),
+
+  // Settings
+  getAdminSettings: () => apiRequest('/admin/settings'),
+  updateAdminSettings: (payload) => apiRequest('/admin/settings', { method: 'PUT', body: payload })
 };
 
 // Redirect to login if not authenticated - call at top of protected pages

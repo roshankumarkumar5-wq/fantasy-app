@@ -622,6 +622,34 @@ router.delete('/users/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- APP-WIDE SETTINGS ----------
+// GET /api/admin/settings - current app configuration
+router.get('/settings', async (req, res) => {
+  const { data, error } = await supabase
+    .from('app_config')
+    .select('enable_player_leaderboard')
+    .maybeSingle();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || { enable_player_leaderboard: true });
+});
+
+// PUT /api/admin/settings - update app configuration (single config row)
+router.put('/settings', async (req, res) => {
+  const { enable_player_leaderboard } = req.body;
+  if (typeof enable_player_leaderboard !== 'boolean') {
+    return res.status(400).json({ error: 'enable_player_leaderboard must be a boolean' });
+  }
+
+  const { data, error } = await supabase
+    .from('app_config')
+    .upsert({ id: 1, enable_player_leaderboard }, { onConflict: 'id' })
+    .select()
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json(data);
+});
+
 // GET /api/admin/audit-logs - list all audit logs newest first
 router.get('/audit-logs', async (req, res) => {
   const { limit = 200, offset = 0 } = req.query;

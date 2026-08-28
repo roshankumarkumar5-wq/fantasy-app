@@ -26,6 +26,10 @@ A simplified fantasy-sports app (Dream11-style team picking) with no payments an
    - `database/migrations/005_sms_verification.sql` *(superseded by 006 below — still needed as a stepping stone if you're on an older schema, since 006 depends on the `phone_verified` column this one created)*
    - `database/migrations/006_admin_approval_instead_of_otp.sql`
    - `database/migrations/007_venue_and_format.sql`
+   - `database/migrations/008_dream11_style_scoring.sql`
+   - `database/migrations/009_configurable_credits.sql`
+   - `database/migrations/010_run_out_assists.sql`
+   - `database/migrations/011_player_points_leaderboard.sql`
 4. Go to **Project Settings > API Keys** and copy:
    - **Project URL** (Data API page) — use just the base, e.g. `https://xxxx.supabase.co`, not the `/rest/v1/` suffix
    - The **secret** key (labeled `sb_secret_...` under "Secret keys" — this is what used to be called `service_role`)
@@ -291,3 +295,11 @@ No new database migration needed for this round — this was scoring logic, vali
 - **`points.js` refactored**: the scoring formula now builds a line-by-line breakdown internally (`calculatePointsBreakdown()`), and the final total (`calculateBasePoints()`) is just the sum of that breakdown — guarantees the drill-down view and the actual saved score can never drift apart, since they're now the same calculation.
 - **Results page**: tap any player in "Your Team" to expand a breakdown showing exactly how their points were built up — runs, boundary bonus, milestone bonus, strike-rate bonus, wickets, economy bonus, catches, run-outs, etc. — each on its own line, followed by the base total and (if they were your Captain/VC) the multiplier applied.
 - No new database columns — this reads the same `player_match_stats` row that was already being saved, just returns the full breakdown alongside it now instead of only the final number.
+
+## 22. What changed in this update (player points leaderboard, admin-configurable)
+
+- **New user tab: "Players"** — on the matches page, lists players across *both* teams ranked by total points accumulated across all completed matches (top points first), showing each player's team (logo + name), role, number of matches played, and total points.
+- **Admin-controlled toggle**: the admin dashboard has a new **Settings** tab with a checkbox — *Show "Players" leaderboard tab to users*. The users' tab is hidden while it's off (checked on the frontend) and the backend also refuses to serve the aggregated player leaderboard while disabled, so it can't be reached by typing the URL either. Toggling takes effect immediately, no redeploy.
+- **New endpoints**: `GET /api/settings` (public config flags, including whether the tab is enabled) and `GET /api/leaderboard/players` (the aggregated ranking). Admin side: `GET`/`PUT /api/admin/settings`.
+- **Database changes**: new single-row `app_config` table (column: `enable_player_leaderboard`, defaults to on). If you already have a live Supabase project, run `database/migrations/011_player_points_leaderboard.sql`. The schema.sql fresh-install file includes it too.
+- **Note**: points here are per-player `base_points` from `player_match_stats` (pre-multiplier), summed across completed matches — the same source used for the results-page drill-down, just aggregated up.

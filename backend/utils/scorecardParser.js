@@ -18,8 +18,13 @@ function stripHandednessAndTags(rawName) {
     .trim();
 }
 
+// The merge key is the fully-normalized name (lowercase, tags/punctuation
+// stripped) so that differently-formatted references to the same player -
+// e.g. "R. Sharma" in a dismissal vs "R Sharma" in the batting table, or
+// names carrying tags like "(wk)"/"(c)" - all collapse into ONE row instead
+// of spawning a second row that only contains the catch.
 function getOrCreate(stats, name) {
-  const key = name.toLowerCase();
+  const key = normalizeName(name);
   if (!stats.has(key)) {
     stats.set(key, {
       name,
@@ -32,17 +37,10 @@ function getOrCreate(stats, name) {
 }
 
 function creditFielding(stats, rawName, field) {
-    const clean = stripHandednessAndTags(rawName);
-
-    console.log("fielder =", clean);
-
-    const entry = getOrCreate(stats, clean);
-
-    console.log("before =", entry);
-
-    entry[field]++;
-
-    console.log("after =", entry);
+  const clean = stripHandednessAndTags(rawName);
+  if (!clean) return;
+  const entry = getOrCreate(stats, clean);
+  entry[field]++;
 }
 
 function parseBatsmanLine(line) {
@@ -148,15 +146,9 @@ function creditDismissal(stats, statusText) {
   // full credit for it. We can't reliably tell from this notation which
   // fielder actually broke the stumps vs threw it, so both named fielders
   // get equal "assist" credit rather than splitting unevenly.
-  console.log("text =", JSON.stringify(text));
-
-m = text.match(/run\s*out\s+(.+)/i);
-
-console.log("match =", m);
+  m = text.match(/run\s*out\s+(.+)/i);
   if (m) {
     const fielders = m[1].split('/').map(n => n.trim()).filter(Boolean);
-console.log("m =", m);
-console.log("fielders =", fielders);
     if (fielders.length === 1) {
       creditFielding(stats, fielders[0], 'run_outs');
     } else {
@@ -183,7 +175,7 @@ console.log("fielders =", fielders);
 }
 
 export function parseScorecardText(text) {
-  const stats = new Map(); // key: lowercased clean name -> aggregated row
+  const stats = new Map(); // key: normalized name -> aggregated row
   const lines = text.split('\n');
 
   for (const line of lines) {
@@ -220,7 +212,6 @@ export function parseScorecardText(text) {
     }
   }
 
-console.log(Array.from(stats.values()));
   return Array.from(stats.values());
 }
 

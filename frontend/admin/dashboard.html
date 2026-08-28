@@ -22,6 +22,7 @@
       <a href="users.html">Users</a>
       <a href="#" data-tab="leaderboard">Leaderboard</a>
       <a href="#" data-tab="audit">Audit Log</a>
+      <a href="#" data-tab="settings">Settings</a>
     </div>
 
     <div id="createMatchCard" class="card">
@@ -259,6 +260,43 @@
       }
     }
 
+    async function renderSettings(container) {
+      document.getElementById('matchStatusTabs').style.display = 'none';
+      document.getElementById('createMatchCard').style.display = 'none';
+
+      let settings = { enable_player_leaderboard: true };
+      try {
+        settings = await Api.getAdminSettings();
+      } catch (err) {
+        container.innerHTML = `<div class="card"><p class="error-msg">${err.message}</p></div>`;
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="card">
+          <h3>Settings</h3>
+          <label style="display:flex; align-items:center; gap:10px; margin:14px 0 6px; font-weight:600; color:var(--text); cursor:pointer;">
+            <input type="checkbox" id="enablePlayerLb" style="width:auto;" ${settings.enable_player_leaderboard ? 'checked' : ''}>
+            Show "Players" leaderboard tab to users
+          </label>
+          <p class="match-meta" style="margin:6px 0 0; padding-left:24px;">Ranks players across both teams by total points accumulated across all completed matches. Users see the tab only while this is on — you can toggle it anytime and the change is immediate.</p>
+          <button class="btn" id="saveSettingsBtn">Save Settings</button>
+          <div id="settingsMsg"></div>
+        </div>
+      `;
+
+      document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
+        const enabled = document.getElementById('enablePlayerLb').checked;
+        const msg = document.getElementById('settingsMsg');
+        try {
+          await Api.updateAdminSettings({ enable_player_leaderboard: enabled });
+          msg.innerHTML = '<p class="success-msg">Settings saved. Users will ' + (enabled ? 'now see' : 'no longer see') + ' the Players tab.</p>';
+        } catch (err) {
+          msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
+        }
+      });
+    }
+
     function escHtml(str) {
       if (!str) return '';
       return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -291,6 +329,8 @@
           document.getElementById('matchStatusTabs').style.display = 'none';
           document.getElementById('createMatchCard').style.display = 'none';
           renderAuditLog(container);
+        } else if (tabName === 'settings') {
+          renderSettings(container);
         } else {
           document.getElementById('matchStatusTabs').style.display = 'flex';
           document.getElementById('createMatchCard').style.display = 'block';

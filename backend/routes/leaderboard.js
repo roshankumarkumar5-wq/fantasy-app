@@ -64,4 +64,54 @@ router.get('/overall', requireAuth, async (req, res) => {
   res.json(result);
 });
 
+// GET /api/leaderboard/players
+// Ranks players (across both teams) by points accumulated across all
+// completed matches, top points first. Gated by the admin's
+// app_config.enable_player_leaderboard toggle - served alongside the
+// settings read that controls whether users even see the tab.
+router.get('/players', requireAuth, async (req, res) => {
+  const { data: config } = await supabase
+    .from('app_config')
+    .select('enable_player_leaderboard')
+    .maybeSingle();
+
+  if (!(config?.enable_player_leaderboard ?? true)) {
+    return res.status(403).json({ error: 'The player leaderboard is disabled by the admin.', enabled: false });
+  }
+
+  const { data: statsRows, error } = await supabase
+    .from('player_match_stats')
+    .select('player_id, base_points, match:match_id ( status ), player:player_id ( name, role, team:real_team_id ( name, short_code, logo_url ) )');
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  // Aggregate only stats from completed matches, per player.
+  const byPlayer = new Map();
+  for (const row of statsRows || []) {
+    if (row.match?.status !== 'completed') continue;
+    const p = row.player;
+    if (!p) continue;
+
+    const entry = byPlayer.get(row.player_id) || {
+      player_id: row.player_id,
+      name: p.name,
+      role: p.role,
+      team: p.team || null,
+      total_points: 0,
+      matches_played: 0
+    };
+    entry.total_points += Number(row.base_points) || 0;
+    entry.matches_played += 1;
+    byPlayer.set(row.player_id, entry);
+  }
+
+  const result = Array.from(byPlayer.values())
+    .filter(e => e.total_points > 0)
+    .map(e => ({ ...e, total_points: Math.round(e.total_points * 10) / 10 }))
+    .sort((a, b) => b.total_points - a.total_points)
+    .map((e, i) => ({ rank: i + 1, ...e }));
+
+  res.json(result);
+});
+
 export default router;
