@@ -21,8 +21,10 @@
       <a href="approvals.html">Approvals</a>
       <a href="users.html">Users</a>
       <a href="#" data-tab="leaderboard">Leaderboard</a>
+      <a href="#" data-tab="players">Players</a>
       <a href="#" data-tab="audit">Audit Log</a>
       <a href="#" data-tab="settings">Settings</a>
+      <a href="#" data-tab="backup">Backup &amp; Restore</a>
     </div>
 
     <div id="createMatchCard" class="card">
@@ -39,7 +41,8 @@
   </div>
 
   <script>window.API_BASE_URL = 'https://fantasy-app-backend-znyu.onrender.com/api';</script>
-  <script src="../js/api.js?v=1785292223"></script>
+  <script src="../js/api.js?v=1800000001"></script>
+  <script src="../js/player-leaderboard.js?v=1"></script>
   <script>
     requireAdminLogin();
 
@@ -302,6 +305,100 @@
       return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    // ---- Players Leaderboard (shared renderer from ../js/player-leaderboard.js) ----
+    function renderAdminPlayersLeaderboard(container) {
+      document.getElementById('matchStatusTabs').style.display = 'none';
+      document.getElementById('createMatchCard').style.display = 'none';
+      PlayerLeaderboard.render(container);
+    }
+
+    function renderBackup(container) {
+      document.getElementById('matchStatusTabs').style.display = 'none';
+      document.getElementById('createMatchCard').style.display = 'none';
+
+      container.innerHTML = `
+        <div class="card">
+          <h3>Backup &amp; Restore</h3>
+          <p class="match-meta">Keep a safe, offline copy of every row in every table (teams, players, matches, user teams, stats, users, settings). If the database is ever lost, breached, or corrupted, use the Restore section below to bring it back to this backup's point in time. This operation is admin-only.</p>
+        </div>
+
+        <div class="card">
+          <h3>Download Backup</h3>
+          <p class="match-meta">Downloads a full snapshot of all app data as a single JSON file. Keep it somewhere safe (e.g. Google Drive, a private GitHub repo, an external drive). Take a fresh backup before making big changes.</p>
+          <button class="btn" id="downloadBackupBtn">Download Full Backup</button>
+          <div id="backupMsg" style="margin-top:10px;"></div>
+        </div>
+
+        <div class="card" style="border:1px solid #e5484d;">
+          <h3 style="color:#e5484d;">Restore From Backup</h3>
+          <p class="match-meta" style="color:#e5484d;">DANGER: Restoring REPLACES all current data with the backup's contents. Anything added to the app after the backup was taken will be permanently deleted. This cannot be undone.</p>
+          <input type="file" id="backupFileInput" accept=".json,application/json" style="max-width:100%;">
+          <label style="display:flex; align-items:flex-start; gap:8px; margin:12px 0; font-size:13px; cursor:pointer;">
+            <input type="checkbox" id="restoreConfirm" style="width:auto; margin-top:2px;">
+            I understand this will permanently overwrite all current app data.
+          </label>
+          <button class="btn" id="restoreBackupBtn" disabled>Restore Backup</button>
+          <div id="restoreMsg" style="margin-top:10px;"></div>
+        </div>
+      `;
+
+      const backupMsg = document.getElementById('backupMsg');
+      const restoreMsg = document.getElementById('restoreMsg');
+
+      document.getElementById('downloadBackupBtn').addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        backupMsg.innerHTML = '<p class="match-meta">Preparing backup...</p>';
+        try {
+          const data = await Api.downloadBackup();
+          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `fantasy-backup-${(data.exported_at || new Date().toISOString()).slice(0, 10)}.json`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+          backupMsg.innerHTML = '<p class="success-msg">Backup downloaded. Store this file somewhere safe.</p>';
+        } catch (err) {
+          backupMsg.innerHTML = `<p class="error-msg">${escHtml(err.message)}</p>`;
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      document.getElementById('restoreConfirm').addEventListener('change', (e) => {
+        document.getElementById('restoreBackupBtn').disabled = !e.currentTarget.checked;
+      });
+
+      document.getElementById('restoreBackupBtn').addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        const fileInput = document.getElementById('backupFileInput');
+        if (!fileInput.files || !fileInput.files[0]) {
+          restoreMsg.innerHTML = '<p class="error-msg">Choose a backup JSON file first.</p>';
+          return;
+        }
+        const fd = new FormData();
+        fd.append('file', fileInput.files[0]);
+        btn.disabled = true;
+        restoreMsg.innerHTML = '<p class="match-meta">Restoring... do not close this page.</p>';
+        try {
+          const res = await Api.restoreBackup(fd);
+          const summary = res.restored
+            ? Object.entries(res.restored).map(([t, n]) => `${t}: ${n}`).join(', ')
+            : '';
+          restoreMsg.innerHTML = `<p class="success-msg">${escHtml(res.message || 'Restore completed.')}${summary ? '<br><span style="font-size:12px;">' + escHtml(summary) + '</span>' : ''}</p>`;
+        } catch (err) {
+          restoreMsg.innerHTML = `<p class="error-msg">${escHtml(err.message)}</p>`;
+        } finally {
+          document.getElementById('restoreConfirm').checked = false;
+          document.getElementById('restoreBackupBtn').disabled = true;
+          fileInput.value = '';
+        }
+      });
+    }
+
     // Match status filter tabs (Upcoming / Completed)
     document.querySelectorAll('#matchStatusTabs a[data-ftab]').forEach(tab => {
       tab.addEventListener('click', (e) => {
@@ -325,12 +422,16 @@
           document.getElementById('matchStatusTabs').style.display = 'none';
           document.getElementById('createMatchCard').style.display = 'none';
           renderOverallLeaderboard(container);
+        } else if (tabName === 'players') {
+          renderAdminPlayersLeaderboard(container);
         } else if (tabName === 'audit') {
           document.getElementById('matchStatusTabs').style.display = 'none';
           document.getElementById('createMatchCard').style.display = 'none';
           renderAuditLog(container);
         } else if (tabName === 'settings') {
           renderSettings(container);
+        } else if (tabName === 'backup') {
+          renderBackup(container);
         } else {
           document.getElementById('matchStatusTabs').style.display = 'flex';
           document.getElementById('createMatchCard').style.display = 'block';

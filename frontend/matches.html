@@ -28,7 +28,8 @@
   </div>
 
   <script>window.API_BASE_URL = 'https://fantasy-app-backend-znyu.onrender.com/api';</script>
-  <script src="js/api.js?v=1785292223"></script>
+  <script src="js/api.js?v=1800000001"></script>
+  <script src="js/player-leaderboard.js?v=1"></script>
   <script>
     requireLogin();
 
@@ -53,7 +54,6 @@
     let allMatches = [];
     let overallData = [];
     let viewedTeams = {};
-    let playersData = null;
 
     function renderMatches() {
       const container = document.getElementById('matchList');
@@ -117,47 +117,9 @@
       });
     }
 
-    // ---- Players Leaderboard (across both teams, max points first) ----
-    function playerTeamLogo(team) {
-      if (team?.logo_url) {
-        return `<img src="${team.logo_url}" alt="${team.short_code || team.name}" style="width:34px;height:34px;border-radius:50%;object-fit:cover;background:#fff;border:1px solid var(--border);flex-shrink:0;">`;
-      }
-      return `<div style="width:34px;height:34px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">${(team?.short_code || '?').slice(0, 3)}</div>`;
-    }
-
-    async function renderPlayersLeaderboard(container) {
-      if (playersData === null) {
-        try {
-          playersData = await Api.getPlayerLeaderboard();
-        } catch (err) {
-          container.innerHTML = `<div class="card"><p class="error-msg">${err.message}</p></div>`;
-          return;
-        }
-      }
-
-      if (playersData.length === 0) {
-        container.innerHTML = '<div class="card"><p>No player points yet. Points appear once matches are completed.</p></div>';
-        return;
-      }
-
-      container.innerHTML = `
-        <div class="card">
-          <h3>Players Leaderboard</h3>
-          <p class="match-meta">Players across both teams, ranked by total points accumulated across completed matches.</p>
-        </div>
-        ${playersData.map(p => `
-          <div class="card" style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-            <div style="display:flex; align-items:center; gap:10px; min-width:0;">
-              ${playerTeamLogo(p.team)}
-              <div style="min-width:0;">
-                <div style="font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"><span style="color:var(--muted); font-weight:600;">${p.rank}.</span> ${p.name}</div>
-                <div class="match-meta" style="font-size:12px;">${p.team?.name || 'Unknown team'} · ${p.role} · ${p.matches_played} match${p.matches_played === 1 ? '' : 'es'}</div>
-              </div>
-            </div>
-            <span style="font-weight:700; color:var(--primary); flex-shrink:0;">${p.total_points}</span>
-          </div>
-        `).join('')}
-      `;
+    // ---- Players Leaderboard (shared renderer from js/player-leaderboard.js) ----
+    function renderPlayersLeaderboard(container) {
+      PlayerLeaderboard.render(container);
     }
 
     // Reveals the Players tab only if the admin has enabled it (app config).

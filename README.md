@@ -303,3 +303,43 @@ No new database migration needed for this round — this was scoring logic, vali
 - **New endpoints**: `GET /api/settings` (public config flags, including whether the tab is enabled) and `GET /api/leaderboard/players` (the aggregated ranking). Admin side: `GET`/`PUT /api/admin/settings`.
 - **Database changes**: new single-row `app_config` table (column: `enable_player_leaderboard`, defaults to on). If you already have a live Supabase project, run `database/migrations/011_player_points_leaderboard.sql`. The schema.sql fresh-install file includes it too.
 - **Note**: points here are per-player `base_points` from `player_match_stats` (pre-multiplier), summed across completed matches — the same source used for the results-page drill-down, just aggregated up.
+
+## 23. What changed in this update (admin backup & restore)
+
+- **New admin tab: "Backup & Restore"** on the admin dashboard (admin-only):
+  - **Download Backup** — exports every row of every table (`real_teams`, `players`, `users`, `matches`, `match_special_rules`, `match_credit_rules`, `user_teams`, `user_team_players`, `player_match_stats`, `audit_logs`, `app_config`, `scoring_rules`) into a single `fantasy-backup-YYYY-MM-DD.json` file. Safe to store anywhere (Drive, a private repo, an external drive).
+  - **Restore From Backup** — picks that JSON file back up and replaces the entire database with its contents: all current tables are wiped (in foreign-key-safe order) and re-imported (parents first). Intended for recovering from a data breach, accidental wipe, or corruption. Gated behind a checkbox ("I understand this will permanently overwrite all current app data") and only reachable by an admin.
+- **New endpoints**:
+  - `GET /api/admin/backup` — full JSON snapshot.
+  - `POST /api/admin/backup/restore` — wipe + re-import from an uploaded backup file (validated as a recognized `format_version: 1` backup before touching anything).
+- **Safety notes**: the restore wipes tables one at a time (children first so foreign keys never block it), and if any step fails it reports exactly where it stopped and tells you to re-run restore with the same file — the operation is idempotent. `app_config`/`scoring_rules` singletons are auto re-seeded with defaults if a backup doesn't contain them. The backup covers database rows only — **scoresheet PDFs in Supabase Storage are not included**; those stay in your Storage bucket.
+- **Audit logging**: downloads and restores are recorded in `audit_logs` (maker's name + timestamp).
+- No database migration required.
+
+## 24. What changed in this update (full players leaderboard — multi-stat tabs, season caps, match filter)
+
+The Players leaderboard (available to **users** via the "Players" tab on `matches.html` — still gated by the admin's Settings toggle — and to **admins** via the "Players" tab on the admin dashboard, always available regardless of that toggle) was rebuilt into a full stat board. Both pages now share one renderer, `frontend/js/player-leaderboard.js`.
+
+**Stat tabs (13 boards, "season" = all completed matches):**
+1. **Fantasy Points** — total fantasy points
+2. **Runs** — total runs
+3. **Wickets** — total wickets
+4. **Catches** — total catches
+5. **Fours** — total boundaries
+6. **Sixes** — total maximums
+7. **Best Score** — each player's best (highest) runs in a single match
+8. **Strike Rate** — runs ÷ balls faced × 100 (shown only above **30 balls** faced, so part-timers don't top the board)
+9. **Economy** — runs conceded per over (shown only above **5 overs** bowled; lowest first)
+10. **Stumpings** — total stumpings
+11. **Run Outs** — total direct-hit run-outs
+12. **Most Picked** — how many times users picked the player in submitted teams (any match, not just completed)
+13. **Captain Picks** — how many times the player was used in the 1st special (Captain) slot
+
+**Season Awards card** (shown above the tabs, updates live): **Orange Cap** = current top run-scorer, **Purple Cap** = current top wicket-taker, with team logo and total.
+
+**Filter by match**: a dropdown lists every completed match ("TeamA vs TeamB"); selecting one re-computes all 13 boards and the caps for that single match. "All completed matches" is the default season view.
+
+**Each row shows** rank, team logo + name, player name, role, matches played, and the selected stat — plus the player's total fantasy points on non-points boards.
+
+**Backend changes**: `GET /api/leaderboard/players` now aggregates runs, wickets, catches, fours, sixes, stumpings, run-outs, bowled/LBW wickets, balls faced, overs bowled and runs conceded per player, derives `best_runs`, `strike_rate` and `economy_rate` (with the min-sample constants `STRIKE_RATE_MIN_BALLS=30`, `ECONOMY_MIN_OVERS=5` at the top of `backend/routes/leaderboard.js`), and counts `picks`/`captain_picks` from `user_team_players`. Query params: `?sortBy=points|runs|wickets|catches|fours|sixes|best_score|strike_rate|economy|stumpings|run_outs|picks|captain` and `?matchId=<uuid>`. Admin accounts bypass the `app_config.enable_player_leaderboard` gate. The frontend fetches once per view and re-sorts/ranks locally.
+- No database migration required.

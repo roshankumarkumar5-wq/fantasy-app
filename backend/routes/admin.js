@@ -663,4 +663,206 @@ router.get('/audit-logs', async (req, res) => {
   res.json(data);
 });
 
+// ---------- BACKUP & RESTORE ----------
+// All application tables, in dependency order for restore (parents first).
+// The backup is a single JSON file containing every row of every table, so
+// it can be downloaded and kept somewhere safe, then re-imported to bring a
+// breached/wiped database back to its last-known-good state.
+const BACKUP_TABLES = [
+  'real_teams',
+  'players',
+  'users',
+  'matches',
+  'match_special_rules',
+  'match_credit_rules',
+  'user_teams',
+  'user_team_players',
+  'player_match_stats',
+  'app_config',
+  'scoring_rules'
+];
+
+// audit_logs isn't part of the schema.sql setup (it's created manually and the
+// rest of the app treats it as best-effort), so it's backed up/restored
+// separately and never allowed to block a backup or abort a restore.
+const OPTIONAL_BACKUP_TABLES = ['audit_logs'];
+
+// Delete order is the reverse (children first), so foreign keys never block
+// the wipe. The config singletons are wiped too and re-seeded on restore.
+const BACKUP_DELETE_ORDER = [...BACKUP_TABLES].reverse();
+
+// If a config table comes back empty after restore, fall back to these
+// defaults (mirrors the seed rows in database/schema.sql).
+const CONFIG_TABLE_DEFAULTS = {
+  app_config: () => [{ id: 1, enable_player_leaderboard: true }],
+  scoring_rules: () => [{
+    id: 1,
+    points_per_run: 1,
+    points_per_wicket: 25,
+    points_per_catch: 8,
+    points_per_stumping: 12,
+    points_per_run_out: 6
+  }]
+};
+
+// DELETE /api/admin/backup - download a full snapshot of all app data as JSON.
+// The whole app is on the service-role client (no RLS), and the backup is
+// admin-only, so this simply reads every table.
+router.get('/backup', async (req, res) => {
+  const tables = {};
+  let anyTableFailed = false;
+
+  for (const tableName of BACKUP_TABLES) {
+    const { data, error } = await supabase.from(tableName).select('*');
+    if (error) {
+      anyTableFailed = true;
+      console.error(`Backup: failed to read ${tableName}:`, error.message);
+      tables[tableName] = [];
+    } else {
+      tables[tableName] = data || [];
+    }
+  }
+
+  // Best-effort optional tables - never fail the whole backup over these.
+  for (const tableName of OPTIONAL_BACKUP_TABLES) {
+    try {
+      const { data, error } = await supabase.from(tableName).select('*');
+      tables[tableName] = error ? [] : (data || []);
+      if (error) console.error(`Backup: optional table ${tableName} unavailable:`, error.message);
+    } catch (err) {
+      tables[tableName] = [];
+      console.error(`Backup: optional table ${tableName} unavailable:`, err.message);
+    }
+  }
+
+  if (anyTableFailed) {
+    return res.status(500).json({
+      error: 'Could not read every table during backup. See server logs. Your data has NOT been modified - nothing was written.'
+    });
+  }
+
+  const payload = {
+    app: 'fantasy-league',
+    format_version: 1,
+    exported_at: new Date().toISOString(),
+    tables
+  };
+
+  try {
+    const { data: user } = await supabase
+      .from('users')
+      .select('full_name')
+      .eq('id', req.user.id)
+      .single();
+    await supabase.from('audit_logs').insert({
+      user_id: req.user.id,
+      user_name: user?.full_name || 'Unknown',
+      action: 'backup_download',
+      details: `Full backup downloaded (${new Date().toISOString()})`
+    });
+  } catch (_) { /* logging is best-effort */ }
+
+  res.setHeader('Content-Disposition', `attachment; filename="fantasy-backup-${new Date().toISOString().slice(0, 10)}.json"`);
+  res.json(payload);
+});
+
+// POST /api/admin/backup/restore - wipe all tables and re-import from a backup
+// file produced by GET /api/admin/backup. Destructive on purpose (that's the
+// point on a breached/compromised database), so it's admin-only, requires the
+// uploaded file to be a valid recognized backup, and logs the operation.
+router.post('/backup/restore', upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'A backup JSON file is required (field name: file)' });
+
+  let payload;
+  try {
+    payload = JSON.parse(req.file.buffer.toString('utf8'));
+  } catch (err) {
+    return res.status(400).json({ error: 'Could not parse the uploaded file as JSON.' });
+  }
+
+  if (!payload || payload.format_version !== 1 || !payload.tables || typeof payload.tables !== 'object') {
+    return res.status(400).json({ error: 'This does not look like a recognized Fantasy League backup file (missing format_version/tables).' });
+  }
+
+  const backupTables = payload.tables;
+
+  // 1) Wipe every table (children first so FK constraints never block).
+  for (const tableName of BACKUP_DELETE_ORDER) {
+    let query = supabase.from(tableName).delete();
+    if (tableName === 'app_config' || tableName === 'scoring_rules') {
+      query = query.gte('id', 0);
+    } else {
+      // Supabase requires a filter for delete; this matches nothing but the
+      // empty placeholder so it acts as "delete all".
+      query = query.neq('id', '00000000-0000-0000-0000-000000000000');
+    }
+    const { error } = await query;
+    if (error) {
+      console.error(`Restore: failed to clear ${tableName}:`, error.message);
+      return res.status(500).json({
+        error: `Restore aborted: could not clear table "${tableName}": ${error.message}. The database may be partially cleared - re-run restore with the backup file.`
+      });
+    }
+  }
+
+  // Best-effort wipe of optional tables - must happen before users are
+  // deleted (if audit_logs has a FK to users), but never aborts a restore.
+  for (const tableName of OPTIONAL_BACKUP_TABLES) {
+    try {
+      await supabase.from(tableName).delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    } catch (err) {
+      console.error(`Restore: optional table ${tableName} could not be cleared (skipping):`, err.message);
+    }
+  }
+
+  // 2) Re-import (parents first so rows always reference rows that already exist).
+  const restored = {};
+  for (const tableName of [...BACKUP_TABLES, ...OPTIONAL_BACKUP_TABLES]) {
+    const rows = Array.isArray(backupTables[tableName]) ? backupTables[tableName] : [];
+    const isConfigTable = !!CONFIG_TABLE_DEFAULTS[tableName];
+    if (rows.length === 0 && !isConfigTable) {
+      restored[tableName] = 0;
+      continue;
+    }
+
+    const rowsToInsert = rows.length > 0
+      ? rows
+      // Config singletons that came back empty still get default-seeded so the
+      // app keeps functioning even with a minimal/old backup.
+      : CONFIG_TABLE_DEFAULTS[tableName]();
+
+    const { error } = await supabase.from(tableName).insert(rowsToInsert);
+    if (error) {
+      // Optional tables (e.g. audit_logs) failing on restore are non-fatal.
+      if (OPTIONAL_BACKUP_TABLES.includes(tableName)) {
+        console.error(`Restore: optional table ${tableName} could not be restored (skipping):`, error.message);
+        restored[tableName] = 0;
+        continue;
+      }
+      console.error(`Restore: failed to re-insert into ${tableName}:`, error.message);
+      return res.status(500).json({
+        error: `Restore failed part-way at table "${tableName}": ${error.message}. Tables are being restored in dependency order, so re-running restore with the same backup file should complete cleanly.`,
+        restored
+      });
+    }
+    restored[tableName] = rowsToInsert.length;
+  }
+
+  try {
+    const { data: user } = await supabase
+      .from('users')
+      .select('full_name')
+      .eq('id', req.user.id)
+      .single();
+    await supabase.from('audit_logs').insert({
+      user_id: req.user.id,
+      user_name: user?.full_name || 'Unknown',
+      action: 'backup_restore',
+      details: `Restore completed: ${JSON.stringify(restored)}`
+    });
+  } catch (_) { /* logging is best-effort */ }
+
+  res.json({ success: true, message: 'Restore completed successfully.', restored });
+});
+
 export default router;

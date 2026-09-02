@@ -67,7 +67,13 @@ const Api = {
   getPublicLeaderboard: (matchId) => apiRequest(`/matches/${matchId}/leaderboard`),
   getSubmitters: (matchId) => apiRequest(`/matches/${matchId}/submitters`),
   getOverallLeaderboard: () => apiRequest('/leaderboard/overall'),
-  getPlayerLeaderboard: () => apiRequest('/leaderboard/players'),
+  getPlayerLeaderboard: (sortBy, matchId) => {
+    const params = new URLSearchParams();
+    if (sortBy) params.set('sortBy', sortBy);
+    if (matchId) params.set('matchId', matchId);
+    const qs = params.toString();
+    return apiRequest(`/leaderboard/players${qs ? `?${qs}` : ''}`);
+  },
   getSettings: () => apiRequest('/settings'),
 
   // Admin
@@ -103,7 +109,11 @@ const Api = {
 
   // Settings
   getAdminSettings: () => apiRequest('/admin/settings'),
-  updateAdminSettings: (payload) => apiRequest('/admin/settings', { method: 'PUT', body: payload })
+  updateAdminSettings: (payload) => apiRequest('/admin/settings', { method: 'PUT', body: payload }),
+
+  // Backup & Restore
+  downloadBackup: () => apiRequest('/admin/backup'),
+  restoreBackup: (formData) => apiRequest('/admin/backup/restore', { method: 'POST', body: formData, isFormData: true })
 };
 
 // Redirect to login if not authenticated - call at top of protected pages
