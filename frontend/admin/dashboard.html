@@ -390,12 +390,12 @@
 
     function renderSettingsPlayerTabs(teams, players) {
       const totalCount = players ? players.length : 0;
-      const allTab = `<a href="#"
-          data-team-id="all" class="${settingsSelectedTeamId === 'all' ? 'active' : ''}">All Teams (${totalCount})</a>`;
+      const allTab = `<button type="button"
+          class="${settingsSelectedTeamId === 'all' ? 'active' : ''}" data-team-id="all">All Teams (${totalCount})</button>`;
       const teamTabs = teams.map(t => {
         const count = playerCountByTeam(players, t.id);
-        return `<a href="#"
-          data-team-id="${escHtmlAttr(t.id)}" class="${settingsSelectedTeamId === t.id ? 'active' : ''}">${escHtml(t.short_code || t.name)} (${count})</a>`;
+        return `<button type="button"
+          class="${settingsSelectedTeamId === t.id ? 'active' : ''}" data-team-id="${escHtmlAttr(t.id)}">${escHtml(t.short_code || t.name)} (${count})</button>`;
       });
       return allTab + teamTabs.join('');
     }
@@ -434,7 +434,7 @@
       tabsEl.innerHTML = renderSettingsPlayerTabs(teams, players);
       listEl.innerHTML = renderSettingsPlayerList(players, teamOptions);
 
-      tabsEl.querySelectorAll('a[data-team-id]').forEach(tab => {
+      tabsEl.querySelectorAll('button[data-team-id]').forEach(tab => {
         tab.addEventListener('click', (e) => {
           e.preventDefault();
           settingsSelectedTeamId = tab.dataset.teamId;
