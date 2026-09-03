@@ -318,23 +318,9 @@
 
         <div class="card" style="padding:0; overflow-x:auto;">
           <h3 style="margin:14px 16px;">Change Player Team</h3>
-          <p class="match-meta" style="margin:0 16px 12px;">Pick a player below and assign them to a different team. Note: a player appears in match pools based on their team, so move them before scheduling a match that includes them.</p>
-          <table class="admin-table" style="width:100%; border-collapse:collapse; table-layout:auto;">
-            <thead>
-              <tr><th>Player</th><th>Current Team</th><th>Move To</th><th></th></tr>
-            </thead>
-            <tbody id="settingsPlayersTbody">
-              ${players.map(p => `
-                <tr>
-                  <td style="white-space:nowrap;">${escHtml(p.name)}</td>
-                  <td>${escHtml(p.real_team?.short_code || '-')}</td>
-                  <td><select data-player-id="${p.id}" class="settings-move-team">${teamOptions}</select></td>
-                  <td><button class="btn settings-move-btn" data-player-id="${p.id}" data-player-name="${escHtmlAttr(p.name)}">Change Team</button></td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
-          <div id="settingsMoveMsg" style="margin:0 16px 14px;"></div>
+          <p class="match-meta" style="margin:0 16px 12px;">Players are grouped by their current team. Pick a player and assign them to a different team. Note: a player appears in match pools based on their team, so move them before scheduling a match that includes them.</p>
+          ${groupPlayerRows(players, teamOptions)}
+          <div id="settingsMoveMsg" style="margin:4px 16px 14px;"></div>
         </div>
       `;
 
@@ -408,6 +394,49 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    // Builds the "Change Player Team" markup, grouping players by their
+    // current team with a heading per team so it's easy to locate a player.
+    // Returns an empty-state message when there are no players yet.
+    function groupPlayerRows(players, teamOptions) {
+      if (!players || players.length === 0) {
+        return '<p class="match-meta" style="margin:0 16px 14px;">No players yet - add some with the "Add New Player" form above.</p>';
+      }
+      const groups = new Map(); // team_id -> { team, players: [] }
+      for (const p of players) {
+        const key = p.real_team_id || 'none';
+        if (!groups.has(key)) {
+          groups.set(key, {
+            team: p.real_team || null,
+            players: []
+          });
+        }
+        groups.get(key).players.push(p);
+      }
+
+      let html = '';
+      for (const { team, players: teamPlayers } of groups.values()) {
+        const heading = team ? `${escHtml(team.name)} (${escHtml(team.short_code || '')})` : 'No Team';
+        html += `
+          <div style="padding:0 16px; margin-top:6px;">
+            <div style="display:flex; align-items:center; gap:8px; padding:8px 0 4px; border-bottom:1px solid var(--border);">
+              ${team && team.logo_url ? `<img src="${escHtmlAttr(team.logo_url)}" alt="" style="width:22px;height:22px;border-radius:50%;object-fit:cover;">` : '<span style="width:22px;height:22px;"></span>'}
+              <strong style="font-size:14px; color:var(--text);">${heading}</strong>
+              <span class="match-meta" style="font-size:12px;">(${teamPlayers.length})</span>
+            </div>
+            ${teamPlayers.map(p => `
+              <div style="display:flex; align-items:center; gap:8px; padding:6px 0 6px 30px; border-bottom:1px solid var(--border); flex-wrap:wrap;">
+                <span style="flex:1 1 140px; min-width:120px; font-weight:600; font-size:13px;">${escHtml(p.name)}</span>
+                <span class="match-meta" style="font-size:12px; flex:0 0 auto;">${escHtml(p.role)}</span>
+                <select data-player-id="${p.id}" class="settings-move-team" style="flex:1 1 160px; min-width:140px; max-width:220px;">${teamOptions}</select>
+                <button class="btn settings-move-btn" data-player-id="${p.id}" data-player-name="${escHtmlAttr(p.name)}" style="flex:0 0 auto;">Change Team</button>
+              </div>
+            `).join('')}
+          </div>
+        `;
+      }
+      return html;
     }
 
     function escHtml(str) {

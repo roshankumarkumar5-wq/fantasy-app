@@ -2,7 +2,7 @@
 // Shared Players leaderboard (used by both the user matches page
 // and the admin dashboard). Renders:
 //   - a "filter by match" dropdown (season = all completed matches)
-//   - Season Awards: Orange Cap (top runs) + Purple Cap (top wickets)
+//   - Season Leaders: Orange Cap (top runs) + Purple Cap (top wickets)
 //   - stat tabs: Fantasy Points, Runs, Wickets, Catches, Fours,
 //     Sixes, Best Score, Strike Rate, Economy, Stumpings, Run Outs,
 //     Most Picked, Captain Picks
@@ -156,7 +156,7 @@
     const awardsCards = (caps.orange || caps.purple)
       ? `
         <div class="card">
-          <h3>Season Awards</h3>
+          <h3>Season Leaders</h3>
           <div style="display:flex; flex-direction:column; gap:12px;">
             ${caps.orange ? capCard(caps.orange, 'ORANGE CAP', `${caps.orange.total_runs} runs`, '#E8590C') : ''}
             ${caps.purple ? capCard(caps.purple, 'PURPLE CAP', `${caps.purple.total_wickets} wickets`, '#7048E8') : ''}
