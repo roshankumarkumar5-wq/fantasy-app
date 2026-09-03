@@ -109,6 +109,49 @@ router.delete('/players/:id', async (req, res) => {
   res.json({ success: true });
 });
 
+// Update a player - supports changing their team (e.g. moving a player to a
+// different real team) plus editing name/role/photo/credit. The requested
+// "move a player to another team" operation works here. Only the provided
+// fields are updated. Changing a player's team affects which match pools they
+// appear in (match pools are auto-derived from the two real teams playing),
+// so it's best done before that player is used in an active/completed match.
+router.put('/players/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, real_team_id, role, photo_url, credit_value } = req.body;
+
+  if (real_team_id) {
+    const { data: team, error: teamErr } = await supabase
+      .from('real_teams')
+      .select('id')
+      .eq('id', real_team_id)
+      .maybeSingle();
+    if (teamErr) return res.status(500).json({ error: teamErr.message });
+    if (!team) return res.status(400).json({ error: 'The selected team does not exist.' });
+  }
+
+  const updates = {};
+  if (name !== undefined) updates.name = String(name);
+  if (real_team_id !== undefined && real_team_id !== null) updates.real_team_id = real_team_id;
+  if (role !== undefined) updates.role = role;
+  if (photo_url !== undefined) updates.photo_url = photo_url;
+  if (credit_value !== undefined && credit_value !== null) updates.credit_value = credit_value;
+
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: 'Provide at least one field to update.' });
+  }
+
+  const { data, error } = await supabase
+    .from('players')
+    .update(updates)
+    .eq('id', id)
+    .select('id, name, real_team_id, role, photo_url, credit_value, real_team:real_team_id ( id, name, short_code )')
+    .single();
+  if (error) return res.status(500).json({ error: error.message });
+  if (!data) return res.status(404).json({ error: 'Player not found' });
+
+  res.json(data);
+});
+
 // ---------- MATCHES ----------
 // body: { team_a_id, team_b_id, match_date, venue, match_format }
 // squad_size is fixed at 11. selection_deadline is always calculated

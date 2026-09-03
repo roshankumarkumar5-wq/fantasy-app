@@ -28,7 +28,10 @@
     requireLogin();
     const params = new URLSearchParams(window.location.search);
     const matchId = params.get('matchId');
-    if (!matchId) window.location.href = 'matches.html';
+    if (!matchId) {
+      window.location.href = 'matches.html';
+      return;
+    }
 
     async function loadMyTeam() {
       const el = document.getElementById('myTeamCard');

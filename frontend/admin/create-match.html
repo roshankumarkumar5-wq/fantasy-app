@@ -133,26 +133,40 @@
           match_format: document.getElementById('matchFormat').value.trim() || null
         });
 
-        const enabled = document.getElementById('specialEnabled').value === 'true';
-        const multipliers = document.getElementById('multipliers').value
-          .split(',')
-          .map(s => parseFloat(s.trim()))
-          .filter(n => !isNaN(n));
-
-        await Api.setSpecialRules(match.id, { enabled, multipliers });
-
-        await Api.setCreditRules(match.id, {
-          enabled: creditsEnabled,
-          max_credits: creditsEnabled ? parseFloat(maxCreditsRaw) : 100
-        });
-
+        // Persist the created match ID as soon as the match itself succeeds, so
+        // that even if a rules call below fails, the "Go to Match Detail" button
+        // still works and the admin is never left with a dead button. The success
+        // message also survives so they know the match was actually created.
         createdMatchId = match.id;
         document.getElementById('nextStepsCard').style.display = 'block';
         const IST_OFFSET_MS = (5 * 60 + 30) * 60 * 1000;
         const matchMs = new Date(matchDateUtc).getTime();
         const istDate = new Date(matchMs + IST_OFFSET_MS);
         const deadlineUtc = new Date(Date.UTC(istDate.getUTCFullYear(), istDate.getUTCMonth(), istDate.getUTCDate() - 1, 23, 59, 0) - IST_OFFSET_MS).toISOString();
-        msg.innerHTML = `<p class="success-msg">Match created for ${formatIST(matchDateUtc)}. Selection closes ${formatIST(deadlineUtc)}.</p>`;
+        let message = `<p class="success-msg">Match created for ${formatIST(matchDateUtc)}. Selection closes ${formatIST(deadlineUtc)}.</p>`;
+
+        const enabled = document.getElementById('specialEnabled').value === 'true';
+        const multipliers = document.getElementById('multipliers').value
+          .split(',')
+          .map(s => parseFloat(s.trim()))
+          .filter(n => !isNaN(n));
+
+        try {
+          await Api.setSpecialRules(match.id, { enabled, multipliers });
+        } catch (err) {
+          message += `<p class="error-msg">Match was created, but special-player rules failed to save: ${err.message}. You can set them on the match detail page.</p>`;
+        }
+
+        try {
+          await Api.setCreditRules(match.id, {
+            enabled: creditsEnabled,
+            max_credits: creditsEnabled ? parseFloat(maxCreditsRaw) : 100
+          });
+        } catch (err) {
+          message += `<p class="error-msg">Match was created, but credit rules failed to save: ${err.message}. You can set them on the match detail page.</p>`;
+        }
+
+        msg.innerHTML = message;
       } catch (err) {
         msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
       }

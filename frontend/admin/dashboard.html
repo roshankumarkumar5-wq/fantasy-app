@@ -268,12 +268,20 @@
       document.getElementById('createMatchCard').style.display = 'none';
 
       let settings = { enable_player_leaderboard: true };
+      let teams = [];
+      let players = [];
       try {
         settings = await Api.getAdminSettings();
+        teams = await Api.listRealTeams();
+        players = await Api.listPlayers();
       } catch (err) {
         container.innerHTML = `<div class="card"><p class="error-msg">${err.message}</p></div>`;
         return;
       }
+
+      const teamOptions = teams.length === 0
+        ? '<option value="">No teams yet - add teams on the Teams &amp; Players page first</option>'
+        : '<option value="">Select a team</option>' + teams.map(t => `<option value="${t.id}">${t.name} (${t.short_code})</option>`).join('');
 
       container.innerHTML = `
         <div class="card">
@@ -285,6 +293,48 @@
           <p class="match-meta" style="margin:6px 0 0; padding-left:24px;">Ranks players across both teams by total points accumulated across all completed matches. Users see the tab only while this is on — you can toggle it anytime and the change is immediate.</p>
           <button class="btn" id="saveSettingsBtn">Save Settings</button>
           <div id="settingsMsg"></div>
+        </div>
+
+        <div class="card">
+          <h3>Add New Player</h3>
+          <label>Name</label>
+          <input type="text" id="settingsPlayerName" placeholder="Player name">
+          <label>Team</label>
+          <select id="settingsPlayerTeamId">${teamOptions}</select>
+          <label>Role</label>
+          <select id="settingsPlayerRole">
+            <option value="batsman">Batsman</option>
+            <option value="bowler">Bowler</option>
+            <option value="all-rounder">All-Rounder</option>
+            <option value="keeper">Wicket-Keeper</option>
+          </select>
+          <label>Photo URL (optional)</label>
+          <input type="text" id="settingsPlayerPhoto" placeholder="https://i.pravatar.cc/150?img=1">
+          <label>Credit Value</label>
+          <input type="number" step="0.5" id="settingsPlayerCredit" placeholder="8.0" value="8.0">
+          <button class="btn" id="settingsAddPlayerBtn">Add Player</button>
+          <div id="settingsAddPlayerMsg"></div>
+        </div>
+
+        <div class="card" style="padding:0; overflow-x:auto;">
+          <h3 style="margin:14px 16px;">Change Player Team</h3>
+          <p class="match-meta" style="margin:0 16px 12px;">Pick a player below and assign them to a different team. Note: a player appears in match pools based on their team, so move them before scheduling a match that includes them.</p>
+          <table class="admin-table" style="width:100%; border-collapse:collapse; table-layout:auto;">
+            <thead>
+              <tr><th>Player</th><th>Current Team</th><th>Move To</th><th></th></tr>
+            </thead>
+            <tbody id="settingsPlayersTbody">
+              ${players.map(p => `
+                <tr>
+                  <td style="white-space:nowrap;">${escHtml(p.name)}</td>
+                  <td>${escHtml(p.real_team?.short_code || '-')}</td>
+                  <td><select data-player-id="${p.id}" class="settings-move-team">${teamOptions}</select></td>
+                  <td><button class="btn settings-move-btn" data-player-id="${p.id}" data-player-name="${escHtmlAttr(p.name)}">Change Team</button></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div id="settingsMoveMsg" style="margin:0 16px 14px;"></div>
         </div>
       `;
 
@@ -298,6 +348,66 @@
           msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
         }
       });
+
+      document.getElementById('settingsAddPlayerBtn').addEventListener('click', async () => {
+        const msg = document.getElementById('settingsAddPlayerMsg');
+        const real_team_id = document.getElementById('settingsPlayerTeamId').value;
+        if (!real_team_id) {
+          msg.innerHTML = '<p class="error-msg">Select a team</p>';
+          return;
+        }
+        const name = document.getElementById('settingsPlayerName').value.trim();
+        if (!name) {
+          msg.innerHTML = '<p class="error-msg">Enter the player name</p>';
+          return;
+        }
+        try {
+          await Api.createPlayer({
+            name,
+            real_team_id,
+            role: document.getElementById('settingsPlayerRole').value,
+            photo_url: document.getElementById('settingsPlayerPhoto').value.trim() || null,
+            credit_value: parseFloat(document.getElementById('settingsPlayerCredit').value) || 8.0
+          });
+          msg.innerHTML = `<p class="success-msg">Added player "${escHtml(name)}"</p>`;
+          document.getElementById('settingsPlayerName').value = '';
+          renderSettings(container);
+        } catch (err) {
+          msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
+        }
+      });
+
+      document.querySelectorAll('.settings-move-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const playerId = btn.dataset.playerId;
+          const playerName = btn.dataset.playerName;
+          const select = document.querySelector(`.settings-move-team[data-player-id="${playerId}"]`);
+          const newTeamId = select.value;
+          const msg = document.getElementById('settingsMoveMsg');
+          if (!newTeamId) {
+            msg.innerHTML = '<p class="error-msg">Select a team to move this player to.</p>';
+            return;
+          }
+          btn.disabled = true;
+          try {
+            await Api.updatePlayer(playerId, { real_team_id: newTeamId });
+            msg.innerHTML = `<p class="success-msg">Moved "${escHtml(playerName)}" to the new team.</p>`;
+            renderSettings(container);
+          } catch (err) {
+            msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
+            btn.disabled = false;
+          }
+        });
+      });
+    }
+
+    function escHtmlAttr(str) {
+      return String(str == null ? '' : str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
 
     function escHtml(str) {

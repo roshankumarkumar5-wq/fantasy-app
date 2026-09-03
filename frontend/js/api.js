@@ -82,6 +82,7 @@ const Api = {
   deleteRealTeam: (id) => apiRequest(`/admin/teams/${id}`, { method: 'DELETE' }),
   listPlayers: () => apiRequest('/admin/players'),
   createPlayer: (payload) => apiRequest('/admin/players', { method: 'POST', body: payload }),
+  updatePlayer: (id, payload) => apiRequest(`/admin/players/${id}`, { method: 'PUT', body: payload }),
   deletePlayer: (id) => apiRequest(`/admin/players/${id}`, { method: 'DELETE' }),
   uploadPlayersCsv: (formData) => apiRequest('/admin/players/upload-csv', { method: 'POST', body: formData, isFormData: true }),
   createMatch: (payload) => apiRequest('/admin/matches', { method: 'POST', body: payload }),
