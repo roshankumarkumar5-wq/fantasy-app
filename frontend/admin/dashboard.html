@@ -434,16 +434,22 @@
       tabsEl.innerHTML = renderSettingsPlayerTabs(teams, players);
       listEl.innerHTML = renderSettingsPlayerList(players, teamOptions);
 
-      tabsEl.querySelectorAll('button[data-team-id]').forEach(tab => {
-        tab.addEventListener('click', (e) => {
+      // Event delegation: one persistent listener on the container handles all
+      // tab clicks, including tabs re-rendered after a selection. Without this,
+      // re-rendering tabsEl.innerHTML would replace the buttons and orphan the
+      // original listeners, so only the first click would work.
+      if (!tabsEl.dataset.delegated) {
+        tabsEl.dataset.delegated = '1';
+        tabsEl.addEventListener('click', (e) => {
+          const tab = e.target.closest('button[data-team-id]');
+          if (!tab) return;
           e.preventDefault();
           settingsSelectedTeamId = tab.dataset.teamId;
-          // Re-render just the tabs + list for this section (no full reload).
           tabsEl.innerHTML = renderSettingsPlayerTabs(teams, players);
           listEl.innerHTML = renderSettingsPlayerList(players, teamOptions);
           initSettingsPlayerListActions();
         });
-      });
+      }
 
       initSettingsPlayerListActions();
     }
