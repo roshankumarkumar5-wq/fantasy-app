@@ -405,7 +405,10 @@
       }
       const groups = new Map(); // team_id -> { team, players: [] }
       for (const p of players) {
-        const key = p.real_team_id || 'none';
+        // The backend's player list embeds the team as a nested `real_team`
+        // object (it does not return a top-level real_team_id), so group by
+        // the nested team's id rather than p.real_team_id.
+        const key = (p.real_team && p.real_team.id) || 'none';
         if (!groups.has(key)) {
           groups.set(key, {
             team: p.real_team || null,
