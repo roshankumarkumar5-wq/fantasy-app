@@ -81,6 +81,7 @@ const Api = {
   createRealTeam: (payload) => apiRequest('/admin/teams', { method: 'POST', body: payload }),
   deleteRealTeam: (id) => apiRequest(`/admin/teams/${id}`, { method: 'DELETE' }),
   listPlayers: () => apiRequest('/admin/players'),
+  getAdminPlayersStats: () => apiRequest('/admin/players/stats'),
   createPlayer: (payload) => apiRequest('/admin/players', { method: 'POST', body: payload }),
   updatePlayer: (id, payload) => apiRequest(`/admin/players/${id}`, { method: 'PUT', body: payload }),
   deletePlayer: (id) => apiRequest(`/admin/players/${id}`, { method: 'DELETE' }),

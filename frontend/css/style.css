@@ -313,6 +313,13 @@ table.admin-table { width: 100%; border-collapse: collapse; font-size: 13px; tab
 table.admin-table th, table.admin-table td { border: 1px solid var(--border); padding: 8px; text-align: left; word-break: break-word; overflow-wrap: break-word; }
 table.admin-table th { background: #eef1f6; }
 
+/* Player Stats & Credits panel (admin Settings tab) */
+.pc-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table.pc-table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 760px; }
+table.pc-table th, table.pc-table td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; white-space: nowrap; }
+table.pc-table th { background: #eef1f6; font-size: 11px; text-transform: uppercase; letter-spacing: .3px; }
+.pc-credit-input { width: 72px; padding: 4px 6px; font-size: 13px; border-radius: 6px; }
+
 .tab-nav { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 .tab-nav a, .tab-nav button {
   padding: 8px 14px;

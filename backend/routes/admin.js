@@ -7,9 +7,17 @@ import { supabase } from '../db/supabase.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { calculateBasePoints, calculateTeamTotal } from '../utils/points.js';
 import { parseScorecardText, normalizeName } from '../utils/scorecardParser.js';
+import { suggestCredit, ROLE_BASE_CREDIT, MIN_CREDIT, MAX_CREDIT } from '../utils/creditSuggestion.js';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
+
+// Cricket-notation overs ("3.4" = 3 overs + 4 balls) -> total balls.
+function oversToBalls(overs) {
+  const whole = Math.floor(overs);
+  const balls = Math.round((overs - whole) * 10);
+  return whole * 6 + balls;
+}
 
 // All admin routes require a logged-in admin
 router.use(requireAuth, requireAdmin);
@@ -93,6 +101,87 @@ router.get('/players', async (req, res) => {
     .order('name', { ascending: true });
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
+});
+
+// GET /api/admin/players/stats - per-player performance across all
+// completed matches (same source as the leaderboard) plus each player's
+// current credit value and a suggested credit derived from their stats and
+// role (backend/utils/creditSuggestion.js). Drives the admin Settings
+// "Player Stats & Credits" panel - admin can see the basis for each value,
+// apply a suggestion, or override and save a custom credit.
+router.get('/players/stats', async (req, res) => {
+  const { data: allPlayers, error: plErr } = await supabase
+    .from('players')
+    .select(`id, name, role, credit_value, team:real_team_id ( id, name, short_code, logo_url )`)
+    .order('name', { ascending: true });
+  if (plErr) return res.status(500).json({ error: plErr.message });
+
+  const byPlayer = new Map((allPlayers || []).map(p => [p.id, {
+    player_id: p.id,
+    name: p.name,
+    role: p.role,
+    team: p.team || null,
+    credit_value: p.credit_value,
+    matches_played: 0,
+    total_points: 0,
+    total_runs: 0,
+    total_wickets: 0,
+    total_catches: 0,
+    total_fours: 0,
+    total_sixes: 0,
+    total_stumpings: 0,
+    total_run_outs: 0,
+    total_balls_faced: 0,
+    total_overs_bowled: 0,
+    total_runs_conceded: 0,
+    strike_rate: null,
+    economy_rate: null
+  }]));
+
+  const { data: statsRows, error: statsErr } = await supabase
+    .from('player_match_stats')
+    .select('player_id, base_points, runs, wickets, catches, fours, sixes, stumpings, run_outs, balls_faced, overs_bowled, runs_conceded, match:match_id ( status )');
+  if (statsErr) return res.status(500).json({ error: statsErr.message });
+
+  // Only completed matches count toward the stats that drive suggestions.
+  for (const row of statsRows || []) {
+    if (row.match?.status !== 'completed') continue;
+    const e = byPlayer.get(row.player_id);
+    if (!e) continue;
+    e.matches_played += 1;
+    e.total_points += Number(row.base_points) || 0;
+    e.total_runs += Number(row.runs) || 0;
+    e.total_wickets += Number(row.wickets) || 0;
+    e.total_catches += Number(row.catches) || 0;
+    e.total_fours += Number(row.fours) || 0;
+    e.total_sixes += Number(row.sixes) || 0;
+    e.total_stumpings += Number(row.stumpings) || 0;
+    e.total_run_outs += Number(row.run_outs) || 0;
+    e.total_balls_faced += Number(row.balls_faced) || 0;
+    e.total_overs_bowled += Number(row.overs_bowled) || 0;
+    e.total_runs_conceded += Number(row.runs_conceded) || 0;
+  }
+
+  // Derived rates (same minimum-sample thresholds as the leaderboard).
+  const STRIKE_RATE_MIN_BALLS = 30;
+  const ECONOMY_MIN_OVERS = 5;
+
+  for (const e of byPlayer.values()) {
+    e.avg_points = e.matches_played > 0 ? Math.round((e.total_points / e.matches_played) * 10) / 10 : 0;
+    e.total_points = Math.round(e.total_points * 10) / 10;
+    if (e.total_balls_faced >= STRIKE_RATE_MIN_BALLS) {
+      e.strike_rate = Math.round((e.total_runs / e.total_balls_faced) * 1000) / 10;
+    }
+    const balls = oversToBalls(e.total_overs_bowled);
+    if (balls >= ECONOMY_MIN_OVERS * 6) {
+      e.economy_rate = Math.round((e.total_runs_conceded / (balls / 6)) * 100) / 100;
+    }
+    const suggestion = suggestCredit(e);
+    e.suggested_credit = suggestion.value;
+    e.credit_breakdown = suggestion.breakdown;
+  }
+
+  res.json({ players: Array.from(byPlayer.values()), credit_meta: { role_base: ROLE_BASE_CREDIT, min: MIN_CREDIT, max: MAX_CREDIT } });
 });
 
 // Deleting a player is blocked if they're already part of a match pool or a
