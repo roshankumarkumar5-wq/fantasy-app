@@ -416,7 +416,10 @@ function updateStickyOffsets() {
 
     let viewedTeams = {};
 
-    async function loadLockedMatchView() {
+    async function loadLockedMatchView(viewingAllowed) {
+      // "viewingAllowed" = this user may click through to other users' teams
+      // while this match is locked (admin setting). Once a match is completed
+      // other teams are always viewable.
       const container = document.getElementById('playerList');
       try {
         const submitters = await Api.getSubmitters(matchId);
@@ -424,12 +427,14 @@ function updateStickyOffsets() {
           container.innerHTML = '<div class="card"><p>Selection is closed. No teams were submitted.</p></div>';
           return;
         }
+        const isLocked = matchData.match.status === 'locked';
+        const canViewOthers = matchData.match.status === 'completed' || (isLocked && viewingAllowed);
         container.innerHTML = `
           <div class="card">
             <h3>Teams Submitted (${submitters.length})</h3>
-            <p class="match-meta">Click a user to view their team.</p>
+            <p class="match-meta">${canViewOthers ? 'Click a user to view their team.' : 'Other users\' teams are hidden until the match is completed.'}</p>
             ${submitters.map(s => `
-              <div class="player-row" style="cursor:pointer; margin-bottom:4px;" data-user-id="${s.user_id}" data-user-name="${s.full_name}">
+              <div class="player-row" style="cursor:${canViewOthers ? 'pointer' : 'default'}; margin-bottom:4px;" data-user-id="${s.user_id}" data-user-name="${s.full_name}">
                 <span style="font-weight:600; font-size:14px; color:var(--primary);">${s.full_name}</span>
               </div>
               <div class="other-team-panel" id="lockedTeam-${s.user_id}" style="display:none; padding:8px 0 8px 16px;"></div>
@@ -438,17 +443,19 @@ function updateStickyOffsets() {
           </div>
         `;
 
-        document.querySelectorAll('.player-row[data-user-id]').forEach(row => {
-          row.addEventListener('click', () => {
-            const uid = row.dataset.userId;
-            const name = row.dataset.userName;
-            const panel = document.getElementById(`lockedTeam-${uid}`);
-            if (panel.style.display === 'none' || !panel.innerHTML) {
-              loadOtherTeam(uid, name, panel);
-            }
-            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        if (canViewOthers) {
+          document.querySelectorAll('.player-row[data-user-id]').forEach(row => {
+            row.addEventListener('click', () => {
+              const uid = row.dataset.userId;
+              const name = row.dataset.userName;
+              const panel = document.getElementById(`lockedTeam-${uid}`);
+              if (panel.style.display === 'none' || !panel.innerHTML) {
+                loadOtherTeam(uid, name, panel);
+              }
+              panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            });
           });
-        });
+        }
       } catch (err) {
         container.innerHTML = `<div class="card"><p class="error-msg">${err.message}</p></div>`;
       }
@@ -509,7 +516,14 @@ function updateStickyOffsets() {
           document.getElementById('tabsRow').style.display = 'none';
           document.getElementById('actionBtn').disabled = true;
           document.getElementById('playerList').innerHTML = '<div class="card"><p>Loading teams...</p></div>';
-          loadLockedMatchView();
+          // Whether users may view other users' teams while the match is
+          // locked is an admin setting (defaults to allowed).
+          let viewingAllowed = true;
+          try {
+            const appSettings = await Api.getSettings();
+            viewingAllowed = appSettings.enable_team_views_after_lock !== false;
+          } catch (_) { /* fall back to allowed */ }
+          loadLockedMatchView(viewingAllowed);
           return;
         }
 

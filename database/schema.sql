@@ -158,14 +158,17 @@ insert into scoring_rules (id) values (1);
 -- enable_player_leaderboard: show/hide the users' "Players" tab,
 -- which ranks players across both teams by points accumulated
 -- across all completed matches.
+-- enable_team_views_after_lock: whether users may view OTHER users'
+-- fantasy teams once a match is locked (before results are in).
 -- ------------------------------------------------------------
 create table app_config (
   id int primary key default 1,
   enable_player_leaderboard boolean not null default true,
+  enable_team_views_after_lock boolean not null default true,
   check (id = 1)   -- enforce single row
 );
 
-insert into app_config (id, enable_player_leaderboard) values (1, true);
+insert into app_config (id, enable_player_leaderboard, enable_team_views_after_lock) values (1, true, true);
 
 -- ------------------------------------------------------------
 -- Indexes for common lookups

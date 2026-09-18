@@ -269,7 +269,7 @@
       document.getElementById('matchStatusTabs').style.display = 'none';
       document.getElementById('createMatchCard').style.display = 'none';
 
-      let settings = { enable_player_leaderboard: true };
+      let settings = { enable_player_leaderboard: true, enable_team_views_after_lock: true };
       let teams = [];
       let players = [];
       try {
@@ -293,6 +293,11 @@
             Show "Players" leaderboard tab to users
           </label>
           <p class="match-meta" style="margin:6px 0 0; padding-left:24px;">Ranks players across both teams by total points accumulated across all completed matches. Users see the tab only while this is on — you can toggle it anytime and the change is immediate.</p>
+          <label style="display:flex; align-items:center; gap:10px; margin:18px 0 6px; font-weight:600; color:var(--text); cursor:pointer;">
+            <input type="checkbox" id="enableTeamViews" style="width:auto;" ${settings.enable_team_views_after_lock !== false ? 'checked' : ''}>
+            Users can view other users' teams after a match is locked
+          </label>
+          <p class="match-meta" style="margin:6px 0 0; padding-left:24px;">Off means users only see each other's teams after a match is completed (final stats published). On means they can also compare teams as soon as the match is locked, before results are in.</p>
           <button class="btn" id="saveSettingsBtn">Save Settings</button>
           <div id="settingsMsg"></div>
         </div>
@@ -330,11 +335,17 @@
       `;
 
       document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
-        const enabled = document.getElementById('enablePlayerLb').checked;
+        const lbEnabled = document.getElementById('enablePlayerLb').checked;
+        const teamViewsEnabled = document.getElementById('enableTeamViews').checked;
         const msg = document.getElementById('settingsMsg');
         try {
-          await Api.updateAdminSettings({ enable_player_leaderboard: enabled });
-          msg.innerHTML = '<p class="success-msg">Settings saved. Users will ' + (enabled ? 'now see' : 'no longer see') + ' the Players tab.</p>';
+          await Api.updateAdminSettings({
+            enable_player_leaderboard: lbEnabled,
+            enable_team_views_after_lock: teamViewsEnabled
+          });
+          msg.innerHTML = '<p class="success-msg">Settings saved. Users ' +
+            (lbEnabled ? 'now see' : 'no longer see') + ' the Players tab, and ' +
+            (teamViewsEnabled ? 'can' : 'cannot') + ' view each other\'s teams after a match is locked.</p>';
         } catch (err) {
           msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
         }

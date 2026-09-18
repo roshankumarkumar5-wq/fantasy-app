@@ -8,7 +8,9 @@
 //   - Apply the Suggested credit
 //   - Apply a Custom value typed in the row
 // There's also a bulk shortcut to apply every visible player's suggestion
-// at once. Exposes window.PlayerCredits.render(container)
+// at once. The "diff > 2" mode tab filters to players whose existing and
+// suggested credits are more than 2 apart - the ones worth reviewing.
+// Exposes window.PlayerCredits.render(container)
 // ============================================================
 
 (function () {
@@ -17,6 +19,7 @@
     players: [],
     teams: [],
     selectedTeamId: 'all',
+    bigDiffOnly: false,
     meta: null
   };
 
@@ -39,17 +42,41 @@
     return t ? (t.short_code || t.name || '?') : '?';
   }
 
+  // Flagged players: existing credit and suggested credit are more than 2
+  // apart - likely over/under-priced and worth an admin review.
+  function isBigDiff(p) {
+    return Math.abs(Number(p.credit_value) - Number(p.suggested_credit)) > 2;
+  }
+
   function visiblePlayers() {
-    if (state.selectedTeamId === 'all') return state.players;
-    return state.players.filter(p => (p.team && p.team.id) === state.selectedTeamId);
+    let list = state.players;
+    if (state.selectedTeamId !== 'all') {
+      list = list.filter(p => (p.team && p.team.id) === state.selectedTeamId);
+    }
+    if (state.bigDiffOnly) {
+      list = list.filter(isBigDiff);
+    }
+    return list;
   }
 
   function playerCountByTeam(teamId) {
-    return state.players.filter(p => (p.team && p.team.id) === teamId).length;
+    let list = state.players;
+    if (state.bigDiffOnly) list = list.filter(isBigDiff);
+    return list.filter(p => (p.team && p.team.id) === teamId).length;
+  }
+
+  function modeTabsHtml() {
+    const flagged = state.players.filter(isBigDiff).length;
+    return `
+      <button type="button" class="${!state.bigDiffOnly ? 'active' : ''}" data-mode="all">All Players (${state.players.length})</button>
+      <button type="button" class="${state.bigDiffOnly ? 'active' : ''}" data-mode="bigdiff">Existing ↔ Suggested diff &gt; 2 (${flagged})</button>
+    `;
   }
 
   function tabsHtml() {
-    const total = state.players.length;
+    let list = state.players;
+    if (state.bigDiffOnly) list = list.filter(isBigDiff);
+    const total = list.length;
     const allTab = `<button type="button" class="${state.selectedTeamId === 'all' ? 'active' : ''}" data-team-id="all">All Teams (${total})</button>`;
     const teamTabs = state.teams.map(t => {
       const count = playerCountByTeam(t.id);
@@ -74,7 +101,10 @@
   function rowsHtml() {
     const list = visiblePlayers();
     if (list.length === 0) {
-      return '<tr><td colspan="12" style="text-align:center; padding:16px; color:var(--muted);">No players in this view. Add players on the Teams &amp; Players page first.</td></tr>';
+      const msgText = state.bigDiffOnly
+        ? 'No players whose existing and suggested credits differ by more than 2 in the current view.'
+        : 'No players in this view. Add players on the Teams &amp; Players page first.';
+      return `<tr><td colspan="12" style="text-align:center; padding:16px; color:var(--muted);">${msgText}</td></tr>`;
     }
     return list.map(p => {
       const existing = Number(p.credit_value);
@@ -133,7 +163,8 @@
     state.container.innerHTML = `
       <div class="card">
         <h3>Player Stats &amp; Credits</h3>
-        <p class="match-meta">Stats are accumulated across all completed matches. The suggested credit is derived from each player's role and performance (avg fantasy points per match, plus rate-based fine tuning) — hover a suggestion to see its breakdown. Pick a value per player (Existing, Suggested, or a Custom one) and click <em>Apply</em>. You can also apply suggestions to a whole team at once.</p>
+        <p class="match-meta">Stats are accumulated across all completed matches. The suggested credit is derived from each player's role and performance (avg fantasy points per match, plus rate-based fine tuning) — hover a suggestion to see its breakdown. Pick a value per player (Existing, Suggested, or a Custom one) and click <em>Apply</em>. The <em>diff &gt; 2</em> tab shows only players whose existing credit sits more than 2 away from the suggestion — the ones most likely to be over/under-priced. You can also apply suggestions to a whole team at once.</p>
+        <div class="tab-nav" id="pcModeTabs">${modeTabsHtml()}</div>
         <div class="tab-nav" id="pcTeamTabs">${tabsHtml()}</div>
         <button class="btn secondary action-btn-inline" id="pcApplyAll" style="margin:4px 0 10px;">Apply suggested credits to all shown players</button>
         <div class="pc-wrap">
@@ -247,6 +278,14 @@
       if (tab) {
         e.preventDefault();
         state.selectedTeamId = tab.dataset.teamId;
+        renderPanel();
+        return;
+      }
+
+      const modeTab = e.target.closest('#pcModeTabs button[data-mode]');
+      if (modeTab) {
+        e.preventDefault();
+        state.bigDiffOnly = modeTab.dataset.mode === 'bigdiff';
         renderPanel();
       }
     });

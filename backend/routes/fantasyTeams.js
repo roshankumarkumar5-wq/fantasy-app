@@ -188,8 +188,18 @@ router.get('/:match_id', requireAuth, async (req, res) => {
       .select('status')
       .eq('id', match_id)
       .single();
-    if (!match || (match.status !== 'completed' && match.status !== 'locked')) {
-      return res.status(403).json({ error: 'You can only view other users\' teams after the match is locked.' });
+
+    // Completed matches are always public. Locked matches only expose other
+    // users' teams if the admin hasn't disabled team views after lock
+    // (app_config.enable_team_views_after_lock).
+    const { data: config } = await supabase
+      .from('app_config')
+      .select('enable_team_views_after_lock')
+      .maybeSingle();
+    const canViewLocked = !!match && (config?.enable_team_views_after_lock ?? true);
+
+    if (!match || (match.status !== 'completed' && !(match.status === 'locked' && canViewLocked))) {
+      return res.status(403).json({ error: 'You can only view other users\' teams once the match is completed (or locked, when the admin has enabled team views after lock).' });
     }
     userId = targetUserId;
   }

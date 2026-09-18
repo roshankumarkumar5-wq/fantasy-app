@@ -759,22 +759,28 @@ router.delete('/users/:id', async (req, res) => {
 router.get('/settings', async (req, res) => {
   const { data, error } = await supabase
     .from('app_config')
-    .select('enable_player_leaderboard')
+    .select('enable_player_leaderboard, enable_team_views_after_lock')
     .maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data || { enable_player_leaderboard: true });
+  res.json(data || { enable_player_leaderboard: true, enable_team_views_after_lock: true });
 });
 
-// PUT /api/admin/settings - update app configuration (single config row)
+// PUT /api/admin/settings - update app configuration (single config row).
+// Accepts either or both boolean flags; at least one is required.
 router.put('/settings', async (req, res) => {
-  const { enable_player_leaderboard } = req.body;
-  if (typeof enable_player_leaderboard !== 'boolean') {
-    return res.status(400).json({ error: 'enable_player_leaderboard must be a boolean' });
+  const { enable_player_leaderboard, enable_team_views_after_lock } = req.body;
+
+  const updates = {};
+  if (typeof enable_player_leaderboard === 'boolean') updates.enable_player_leaderboard = enable_player_leaderboard;
+  if (typeof enable_team_views_after_lock === 'boolean') updates.enable_team_views_after_lock = enable_team_views_after_lock;
+
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ error: 'Provide at least one boolean setting to update.' });
   }
 
   const { data, error } = await supabase
     .from('app_config')
-    .upsert({ id: 1, enable_player_leaderboard }, { onConflict: 'id' })
+    .upsert({ id: 1, ...updates }, { onConflict: 'id' })
     .select()
     .single();
   if (error) return res.status(500).json({ error: error.message });
@@ -826,7 +832,7 @@ const BACKUP_DELETE_ORDER = [...BACKUP_TABLES].reverse();
 // If a config table comes back empty after restore, fall back to these
 // defaults (mirrors the seed rows in database/schema.sql).
 const CONFIG_TABLE_DEFAULTS = {
-  app_config: () => [{ id: 1, enable_player_leaderboard: true }],
+  app_config: () => [{ id: 1, enable_player_leaderboard: true, enable_team_views_after_lock: true }],
   scoring_rules: () => [{
     id: 1,
     points_per_run: 1,

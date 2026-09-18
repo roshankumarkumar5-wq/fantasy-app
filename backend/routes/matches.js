@@ -132,8 +132,9 @@ router.get('/:id/submitters', requireAuth, async (req, res) => {
 });
 
 // GET /api/matches/:id/leaderboard - public leaderboard for logged-in users.
-// For completed matches, user_id is included so users can click through to
-// see each other's teams. During selection/locked, user_id is omitted for privacy.
+// user_id is included when the match is completed (so users can click through
+// to each other's teams), and also once locked if the admin has enabled
+// team views after lock. During selection user_id is omitted for privacy.
 router.get('/:id/leaderboard', requireAuth, async (req, res) => {
   const { id } = req.params;
 
@@ -143,6 +144,12 @@ router.get('/:id/leaderboard', requireAuth, async (req, res) => {
     .eq('id', id)
     .single();
 
+  const { data: config } = await supabase
+    .from('app_config')
+    .select('enable_team_views_after_lock')
+    .maybeSingle();
+  const viewAfterLock = config?.enable_team_views_after_lock ?? true;
+
   const { data, error } = await supabase
     .from('user_teams')
     .select('user_id, total_points, user:user_id ( full_name )')
@@ -151,7 +158,7 @@ router.get('/:id/leaderboard', requireAuth, async (req, res) => {
 
   if (error) return res.status(500).json({ error: error.message });
 
-  const showUserIds = match?.status === 'completed';
+  const showUserIds = match?.status === 'completed' || (match?.status === 'locked' && viewAfterLock);
 
   const ranked = data.map((row, i) => ({
     rank: i + 1,
