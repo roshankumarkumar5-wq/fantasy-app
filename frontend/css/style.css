@@ -319,6 +319,7 @@ table.pc-table { width: 100%; border-collapse: collapse; font-size: 12px; min-wi
 table.pc-table th, table.pc-table td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; white-space: nowrap; }
 table.pc-table th { background: #eef1f6; font-size: 11px; text-transform: uppercase; letter-spacing: .3px; }
 .pc-credit-input { width: 72px; padding: 4px 6px; font-size: 13px; border-radius: 6px; }
+.pc-choice { width: auto; min-width: 140px; padding: 4px 6px; font-size: 12px; border-radius: 6px; }
 
 .tab-nav { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
 .tab-nav a, .tab-nav button {

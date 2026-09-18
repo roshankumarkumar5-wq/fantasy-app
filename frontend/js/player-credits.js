@@ -1,13 +1,14 @@
 // ============================================================
 // Player Stats & Credits panel (admin Settings tab).
-// Shows every player's performance across completed matches and their
-// current credit value, with a computer-generated suggested credit
-// (produced server-side by backend/utils/creditSuggestion.js). The admin
-// can:
-//   - edit any player's credit and Save it
-//   - pull the suggested value into the input ("Suggestion") and save
-//   - apply every visible player's suggestion at once
-// Exposes window.PlayerCredits.render(container)
+// Shows every player's performance across completed matches, their current
+// ("Existing") credit, and a computer-generated suggested credit (produced
+// server-side by backend/utils/creditSuggestion.js). For each individual
+// player the admin can:
+//   - Apply the Existing credit (keep as-is)
+//   - Apply the Suggested credit
+//   - Apply a Custom value typed in the row
+// There's also a bulk shortcut to apply every visible player's suggestion
+// at once. Exposes window.PlayerCredits.render(container)
 // ============================================================
 
 (function () {
@@ -66,12 +67,21 @@
     return `Base ${base} + performance ${pts > 0 ? '+' : ''}${pts} + role ${role > 0 ? '+' : ''}${role} + consistency ${cons > 0 ? '+' : ''}${cons} = ${b.total ?? p.suggested_credit}`;
   }
 
+  function statCell(value, decimals) {
+    return value == null ? '—' : (decimals ? value.toFixed(decimals) : value);
+  }
+
   function rowsHtml() {
     const list = visiblePlayers();
     if (list.length === 0) {
-      return '<tr><td colspan="10" style="text-align:center; padding:16px; color:var(--muted);">No players in this view. Add players on the Teams &amp; Players page first.</td></tr>';
+      return '<tr><td colspan="12" style="text-align:center; padding:16px; color:var(--muted);">No players in this view. Add players on the Teams &amp; Players page first.</td></tr>';
     }
-    return list.map(p => `
+    return list.map(p => {
+      const existing = Number(p.credit_value);
+      const suggested = p.suggested_credit;
+      const showsSr = p.role === 'batsman' || p.role === 'all-rounder' || p.role === 'keeper';
+      const showsEcon = p.role === 'bowler' || p.role === 'all-rounder';
+      return `
       <tr data-player-id="${esc(p.player_id)}">
         <td>
           <strong>${esc(p.name)}</strong>
@@ -83,20 +93,21 @@
         <td>${p.avg_points}</td>
         <td>${p.total_runs}</td>
         <td>${p.total_wickets}</td>
-        <td>${p.role === 'batsman' || p.role === 'all-rounder' || p.role === 'keeper' ? (p.strike_rate == null ? '—' : p.strike_rate.toFixed(1)) : '—'}</td>
-        <td>${p.role === 'bowler' || p.role === 'all-rounder' ? (p.economy_rate == null ? '—' : p.economy_rate.toFixed(2)) : '—'}</td>
-        <td>
-          <input type="number" step="0.5" min="${minMax().min}" max="${minMax().max}" class="pc-credit-input" data-player-id="${esc(p.player_id)}" value="${Number(p.credit_value)}">
-        </td>
-        <td>
-          <span title="${esc(breakdownTitle(p))}" style="font-weight:700; color:var(--primary); cursor:help;">${p.suggested_credit}</span>
-        </td>
+        <td>${showsSr ? statCell(p.strike_rate, 1) : '—'}</td>
+        <td>${showsEcon ? statCell(p.economy_rate, 2) : '—'}</td>
+        <td style="font-weight:700;">${existing}</td>
+        <td><span title="${esc(breakdownTitle(p))}" style="font-weight:700; color:var(--primary); cursor:help;">${suggested}</span></td>
         <td style="white-space:nowrap;">
-          <button class="btn secondary action-btn-inline pc-sug" data-player-id="${esc(p.player_id)}">Use sug.</button>
-          <button class="btn action-btn-inline pc-save" data-player-id="${esc(p.player_id)}">Save</button>
+          <select class="pc-choice" data-player-id="${esc(p.player_id)}">
+            <option value="existing">Existing (${existing})</option>
+            <option value="suggested">Suggested (${suggested})</option>
+            <option value="custom">Custom…</option>
+          </select>
+          <input type="number" step="0.5" min="${minMax().min}" max="${minMax().max}" class="pc-credit-input pc-custom-input" data-player-id="${esc(p.player_id)}" value="${existing}" style="display:none; margin-top:4px;">
+          <button class="btn action-btn-inline pc-apply" data-player-id="${esc(p.player_id)}" style="margin-top:4px;">Apply</button>
         </td>
-      </tr>
-    `).join('');
+      </tr>`;
+    }).join('');
   }
 
   function msg(text, ok) {
@@ -122,7 +133,7 @@
     state.container.innerHTML = `
       <div class="card">
         <h3>Player Stats &amp; Credits</h3>
-        <p class="match-meta">Stats are accumulated across all completed matches. The suggested credit is derived from each player's role and performance (avg fantasy points per match, plus rate-based fine tuning) — hover a suggestion to see its breakdown. Click <em>Use sug.</em> to copy it into the input, then <em>Save</em>. You can also apply suggestions to a whole team at once.</p>
+        <p class="match-meta">Stats are accumulated across all completed matches. The suggested credit is derived from each player's role and performance (avg fantasy points per match, plus rate-based fine tuning) — hover a suggestion to see its breakdown. Pick a value per player (Existing, Suggested, or a Custom one) and click <em>Apply</em>. You can also apply suggestions to a whole team at once.</p>
         <div class="tab-nav" id="pcTeamTabs">${tabsHtml()}</div>
         <button class="btn secondary action-btn-inline" id="pcApplyAll" style="margin:4px 0 10px;">Apply suggested credits to all shown players</button>
         <div class="pc-wrap">
@@ -138,9 +149,9 @@
                 <th>Wkts</th>
                 <th>SR</th>
                 <th>Econ</th>
-                <th>Credit</th>
+                <th>Existing</th>
                 <th>Suggested</th>
-                <th></th>
+                <th>Apply</th>
               </tr>
             </thead>
             <tbody>${rowsHtml()}</tbody>
@@ -152,49 +163,61 @@
     `;
   }
 
-  function bind() {
+  // Applies the per-player choice (Existing / Suggested / Custom) for one row.
+  function handleApply(btn) {
     const container = state.container;
-    if (container.dataset.pcBound) return; // delegation listener persists across re-renders
-    container.dataset.pcBound = '1';
-    container.addEventListener('click', (e) => {
-      const sugBtn = e.target.closest('.pc-sug');
-      if (sugBtn) {
-        e.preventDefault();
-        const pid = sugBtn.dataset.playerId;
-        const player = state.players.find(p => p.player_id === pid);
-        if (!player) return;
-        const input = container.querySelector(`.pc-credit-input[data-player-id="${pid}"]`);
-        if (input) input.value = player.suggested_credit;
+    const pid = btn.dataset.playerId;
+    const player = state.players.find(p => p.player_id === pid);
+    if (!player) return;
+
+    const choiceEl = container.querySelector(`.pc-choice[data-player-id="${pid}"]`);
+    const choice = choiceEl ? choiceEl.value : 'existing';
+
+    let value;
+    let label;
+    if (choice === 'suggested') {
+      value = player.suggested_credit;
+      label = `the suggested credit (${value})`;
+    } else if (choice === 'custom') {
+      const input = container.querySelector(`.pc-custom-input[data-player-id="${pid}"]`);
+      value = input ? parseFloat(input.value) : NaN;
+      if (!Number.isFinite(value)) {
+        msg('Enter a valid number for the custom credit.', false);
         return;
       }
+      const { min, max } = minMax();
+      if (value < min || value > max) {
+        msg(`Credit value must be between ${min} and ${max}.`, false);
+        return;
+      }
+      label = `the custom credit (${value})`;
+    } else {
+      // "Existing" - already stored, nothing to write.
+      msg(`Kept ${player.name}'s existing credit of ${player.credit_value}.`, true);
+      return;
+    }
 
-      const saveBtn = e.target.closest('.pc-save');
-      if (saveBtn) {
+    btn.disabled = true;
+    btn.textContent = 'Applying…';
+    Api.updatePlayer(pid, { credit_value: value })
+      .then(() => reload({ text: `Applied ${label} to ${player.name}.`, ok: true }))
+      .catch(err => {
+        msg(err.message, false);
+        btn.disabled = false;
+        btn.textContent = 'Apply';
+      });
+  }
+
+  function bind() {
+    const container = state.container;
+    if (container.dataset.pcBound) return; // delegation listeners persist across re-renders
+    container.dataset.pcBound = '1';
+
+    container.addEventListener('click', (e) => {
+      const applyBtn = e.target.closest('.pc-apply');
+      if (applyBtn) {
         e.preventDefault();
-        const pid = saveBtn.dataset.playerId;
-        const input = container.querySelector(`.pc-credit-input[data-player-id="${pid}"]`);
-        const value = input ? parseFloat(input.value) : NaN;
-        if (!Number.isFinite(value)) {
-          msg('Enter a valid number for the credit value.', false);
-          return;
-        }
-        const { min, max } = minMax();
-        if (value < min || value > max) {
-          msg(`Credit value must be between ${min} and ${max}.`, false);
-          return;
-        }
-        saveBtn.disabled = true;
-        saveBtn.textContent = 'Saving…';
-        Api.updatePlayer(pid, { credit_value: value })
-          .then(() => {
-            const name = state.players.find(p => p.player_id === pid)?.name || 'player';
-            return reload({ text: `Saved ${name}'s credit to ${value}.`, ok: true });
-          })
-          .catch(err => {
-            msg(err.message, false);
-            saveBtn.disabled = false;
-            saveBtn.textContent = 'Save';
-          });
+        handleApply(applyBtn);
         return;
       }
 
@@ -226,6 +249,14 @@
         state.selectedTeamId = tab.dataset.teamId;
         renderPanel();
       }
+    });
+
+    // "Custom…" reveals the number input; any other choice hides it.
+    container.addEventListener('change', (e) => {
+      const choice = e.target.closest('.pc-choice');
+      if (!choice) return;
+      const input = container.querySelector(`.pc-custom-input[data-player-id="${choice.dataset.playerId}"]`);
+      if (input) input.style.display = choice.value === 'custom' ? 'block' : 'none';
     });
   }
 
