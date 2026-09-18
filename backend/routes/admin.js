@@ -643,11 +643,11 @@ router.get('/matches/:id/leaderboard', async (req, res) => {
 });
 
 // GET /api/admin/matches/:id/teams/validation - validate every submitted team
-// for an upcoming match against the current rules (squad size, special picks,
-// player pool, role mix, credit budget). This is the admin's sanity-check on
-// the Leaderboard tab so rule violations can be flagged before the match
-// locks. Only meaningful for upcoming matches (points don't exist yet), so
-// locked/completed matches are rejected here.
+// for an upcoming or locked match against the current rules (squad size,
+// special picks, player pool, role mix, credit budget). This is the admin's
+// sanity-check on the Leaderboard tab so rule violations can be flagged
+// before (or right after) the match locks. Completed matches are rejected
+// here - points are already final, so validation has no purpose.
 router.get('/matches/:id/teams/validation', async (req, res) => {
   const { id } = req.params;
 
@@ -657,8 +657,8 @@ router.get('/matches/:id/teams/validation', async (req, res) => {
     .eq('id', id)
     .single();
   if (matchErr) return res.status(404).json({ error: 'Match not found' });
-  if (match.status !== 'upcoming') {
-    return res.status(400).json({ error: 'Team validation is only available for upcoming matches' });
+  if (match.status !== 'upcoming' && match.status !== 'locked') {
+    return res.status(400).json({ error: 'Team validation is only available for upcoming or locked matches' });
   }
 
   const [specialRules, creditRules, playersRes, teamsRes] = await Promise.all([
@@ -703,6 +703,53 @@ router.get('/matches/:id/teams/validation', async (req, res) => {
   }
 
   res.json({ status: match.status, teams });
+});
+
+// DELETE /api/admin/matches/:id/teams/:userId - remove a user's submitted
+// team for a match (upcoming/locked only). Used from the "Validate Teams"
+// tool on the Leaderboard tab to drop squads that break the rules; deleting
+// the user_teams row cascades to its user_team_players rows automatically.
+router.delete('/matches/:id/teams/:userId', async (req, res) => {
+  const { id, userId } = req.params;
+
+  const { data: match, error: matchErr } = await supabase
+    .from('matches')
+    .select('status, team_a:real_teams!team_a_id(short_code), team_b:real_teams!team_b_id(short_code)')
+    .eq('id', id)
+    .single();
+  if (matchErr || !match) return res.status(404).json({ error: 'Match not found' });
+  if (match.status !== 'upcoming' && match.status !== 'locked') {
+    return res.status(400).json({ error: 'Teams can only be deleted while the match is upcoming or locked' });
+  }
+
+  const { data: team, error: findErr } = await supabase
+    .from('user_teams')
+    .select('user:user_id ( full_name, email )')
+    .eq('match_id', id)
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (findErr) return res.status(500).json({ error: findErr.message });
+  if (!team) return res.status(404).json({ error: 'No team found for this user in this match' });
+
+  const { error: delErr } = await supabase
+    .from('user_teams')
+    .delete()
+    .eq('match_id', id)
+    .eq('user_id', userId);
+  if (delErr) return res.status(500).json({ error: delErr.message });
+
+  const teamA = match.team_a?.short_code || '?';
+  const teamB = match.team_b?.short_code || '?';
+  try {
+    await supabase.from('audit_logs').insert({
+      user_id: userId,
+      user_name: team.user?.full_name || team.user?.email || 'Unknown',
+      action: 'admin_delete_team',
+      details: `Deleted team for ${teamA} vs ${teamB} (removed invalid/incomplete squad)`
+    });
+  } catch (_) {}
+
+  res.json({ success: true, deleted_user: team.user?.full_name || team.user?.email || 'Unknown' });
 });
 
 // Delete a completed match and all its related data (user teams, stats, etc.

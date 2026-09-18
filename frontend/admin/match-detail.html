@@ -158,10 +158,12 @@
 
         document.querySelectorAll('.stat-player-select').forEach(populatePlayerSelect);
 
-        // "Validate Teams" is only useful while selections are still open -
-        // once the match locks it's too late to change a squad.
-        document.getElementById('validateTeamsBtn').style.display = m.status === 'upcoming' ? 'inline-block' : 'none';
-        if (m.status !== 'upcoming') document.getElementById('teamValidation').innerHTML = '';
+        // "Validate Teams" is available while selections are open and after
+        // the match locks as an admin sanity-check tool. Once the match is
+        // completed, points are final and the tool is hidden.
+        const showValidate = m.status === 'upcoming' || m.status === 'locked';
+        document.getElementById('validateTeamsBtn').style.display = showValidate ? 'inline-block' : 'none';
+        if (!showValidate) document.getElementById('teamValidation').innerHTML = '';
 
         const scoresheetEl = document.getElementById('currentScoresheet');
         scoresheetEl.innerHTML = m.scoresheet_url
@@ -373,7 +375,9 @@
       }
     });
 
-    document.getElementById('validateTeamsBtn').addEventListener('click', async () => {
+    document.getElementById('validateTeamsBtn').addEventListener('click', runTeamValidation);
+
+    async function runTeamValidation() {
       const el = document.getElementById('teamValidation');
       el.innerHTML = '<p class="match-meta">Validating teams...</p>';
       try {
@@ -390,12 +394,13 @@
             <span class="match-meta" style="margin-left:8px;">${validCount} of ${teams.length} teams valid</span>
           </div>
           <table class="admin-table">
-            <tr><th>#</th><th>User</th><th>Players</th><th>Credits</th><th>Status</th></tr>
+            <tr><th>#</th><th>User</th><th>Players</th><th>Credits</th><th>Status</th><th></th></tr>
             ${teams.map((t, i) => {
               const v = t.validation;
               const credText = v.creditLimit == null
                 ? `${(v.totalCredits || 0).toFixed(1)} (no limit)`
                 : `${(v.totalCredits || 0).toFixed(1)} / ${Number(v.creditLimit).toFixed(1)}`;
+              const safeName = t.full_name.replace(/'/g, "\\'");
               return `<tr>
                 <td>${i + 1}</td>
                 <td>${t.full_name}</td>
@@ -407,6 +412,10 @@
                   : '<span style="color:#dc2626; font-weight:600;">' + v.errors.length + ' issue(s)</span>'}
                 ${v.valid ? '' : v.errors.map(e => '<div style="color:#dc2626;">&bull; ' + e + '</div>').join('')}
                 </td>
+                <td>${v.valid
+                  ? ''
+                  : `<button class="btn" style="background:#dc2626; padding:4px 10px; font-size:12px; white-space:nowrap;" onclick="deleteInvalidTeam('${t.user_id}', '${safeName}')">Delete</button>`}
+                </td>
               </tr>`;
             }).join('')}
           </table>
@@ -414,7 +423,17 @@
       } catch (err) {
         el.innerHTML = `<p class="error-msg">${err.message}</p>`;
       }
-    });
+    }
+
+    async function deleteInvalidTeam(uId, fullName) {
+      if (!confirm(`Delete ${fullName}'s team for this match? This cannot be undone.`)) return;
+      try {
+        await Api.deleteMatchTeam(matchId, uId);
+        runTeamValidation();
+      } catch (err) {
+        alert('Could not delete team: ' + err.message);
+      }
+    }
 
     document.getElementById('downloadLeaderboardBtn').addEventListener('click', async () => {
       if (lastLeaderboard.length === 0) {

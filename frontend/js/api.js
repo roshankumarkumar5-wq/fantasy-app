@@ -96,6 +96,7 @@ const Api = {
   finalizeMatch: (matchId) => apiRequest(`/admin/matches/${matchId}/finalize`, { method: 'POST' }),
   getLeaderboard: (matchId) => apiRequest(`/admin/matches/${matchId}/leaderboard`),
   getMatchTeamValidations: (matchId) => apiRequest(`/admin/matches/${matchId}/teams/validation`),
+  deleteMatchTeam: (matchId, userId) => apiRequest(`/admin/matches/${matchId}/teams/${userId}`, { method: 'DELETE' }),
   deleteMatch: (matchId) => apiRequest(`/admin/matches/${matchId}`, { method: 'DELETE' }),
 
   // User approvals
