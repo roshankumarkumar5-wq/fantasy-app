@@ -95,6 +95,7 @@ const Api = {
   uploadStatsCsv: (matchId, formData) => apiRequest(`/admin/matches/${matchId}/stats/upload-csv`, { method: 'POST', body: formData, isFormData: true }),
   finalizeMatch: (matchId) => apiRequest(`/admin/matches/${matchId}/finalize`, { method: 'POST' }),
   getLeaderboard: (matchId) => apiRequest(`/admin/matches/${matchId}/leaderboard`),
+  getMatchTeamValidations: (matchId) => apiRequest(`/admin/matches/${matchId}/teams/validation`),
   deleteMatch: (matchId) => apiRequest(`/admin/matches/${matchId}`, { method: 'DELETE' }),
 
   // User approvals

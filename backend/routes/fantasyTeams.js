@@ -2,15 +2,9 @@ import express from 'express';
 import { supabase } from '../db/supabase.js';
 import { requireAuth } from '../middleware/auth.js';
 import { calculatePointsBreakdown } from '../utils/points.js';
+import { validateTeam } from '../utils/teamValidation.js';
 
 const router = express.Router();
-
-const MIN_PER_TEAM = 4;
-const MAX_PER_TEAM = 7;
-const MIN_BATTER = 2;
-const MIN_BOWLER = 2;
-const MIN_KEEPER = 1;
-const MIN_ALL_ROUNDER = 1;
 
 // POST /api/fantasy-teams
 // body: { match_id, player_ids: [...], special_picks: [{ player_id, special_rank }] }
@@ -35,112 +29,13 @@ router.post('/', requireAuth, async (req, res) => {
     return res.status(403).json({ error: 'Selection deadline has passed for this match' });
   }
 
-  // 2. Squad size check
-  if (player_ids.length !== match.squad_size) {
-    return res.status(400).json({
-      error: `You must select exactly ${match.squad_size} players (selected ${player_ids.length})`
-    });
-  }
+  // Run every squad rule through the shared validator (squad size, special
+  // picks, player pool, role mix, credit budget). The admin "Validate Teams"
+  // tool on the match leaderboard uses the exact same logic.
+  const { valid, errors } = await validateTeam({ match, playerIds: player_ids, specialPicks: special_picks });
+  if (!valid) return res.status(400).json({ error: errors[0] });
 
-  // 3. Load special rules and validate special picks
-  const { data: specialRules } = await supabase
-    .from('match_special_rules')
-    .select('enabled, multipliers')
-    .eq('match_id', match_id)
-    .maybeSingle();
-
-  if (specialRules?.enabled) {
-    const maxSpecial = specialRules.multipliers.length;
-    if (special_picks.length < maxSpecial) {
-      return res.status(400).json({ error: `You must select all ${maxSpecial} special player(s) (rank 1 and 2)` });
-    }
-    if (special_picks.length > maxSpecial) {
-      return res.status(400).json({ error: `Only ${maxSpecial} special player(s) allowed for this match` });
-    }
-    const ranksUsed = new Set(special_picks.map(p => p.special_rank));
-    if (ranksUsed.size !== special_picks.length) {
-      return res.status(400).json({ error: 'Duplicate special ranks are not allowed' });
-    }
-    for (const pick of special_picks) {
-      if (!player_ids.includes(pick.player_id)) {
-        return res.status(400).json({ error: 'Special player must be one of the selected squad players' });
-      }
-    }
-  } else if (special_picks.length > 0) {
-    return res.status(400).json({ error: 'Special player selection is disabled for this match' });
-  }
-
-  // 4. Team composition check - every player must belong to one of the two
-  // real teams in this match, with between MIN_PER_TEAM and MAX_PER_TEAM
-  // players picked from each side.
-  const { data: pickedPlayers, error: playersErr } = await supabase
-    .from('players')
-    .select('id, real_team_id, credit_value, role')
-    .in('id', player_ids);
-
-  if (playersErr) return res.status(500).json({ error: playersErr.message });
-
-  if (pickedPlayers.length !== player_ids.length) {
-    return res.status(400).json({ error: 'One or more selected players could not be found' });
-  }
-
-  let countA = 0, countB = 0;
-  for (const p of pickedPlayers) {
-    if (p.real_team_id === match.team_a_id) countA++;
-    else if (p.real_team_id === match.team_b_id) countB++;
-    else {
-      return res.status(400).json({ error: 'All players must belong to one of the two teams playing this match' });
-    }
-  }
-
-  if (countA < MIN_PER_TEAM || countA > MAX_PER_TEAM) {
-    return res.status(400).json({
-      error: `You selected ${countA} player(s) from Team A - must be between ${MIN_PER_TEAM} and ${MAX_PER_TEAM}`
-    });
-  }
-  if (countB < MIN_PER_TEAM || countB > MAX_PER_TEAM) {
-    return res.status(400).json({
-      error: `You selected ${countB} player(s) from Team B - must be between ${MIN_PER_TEAM} and ${MAX_PER_TEAM}`
-    });
-  }
-
-  // 4c. Role composition check - at least 3 batsmen, 3 bowlers, 1 keeper,
-  // 1 all-rounder (the remaining slots can be any role).
-  const countBat = pickedPlayers.filter(p => p.role === 'batsman').length;
-  const countBowl = pickedPlayers.filter(p => p.role === 'bowler').length;
-  const countKeep = pickedPlayers.filter(p => p.role === 'keeper').length;
-  const countAllRounder = pickedPlayers.filter(p => p.role === 'all-rounder').length;
-
-  if (countBat < MIN_BATTER) {
-    return res.status(400).json({ error: `You need at least ${MIN_BATTER} batsmen (selected ${countBat})` });
-  }
-  if (countBowl < MIN_BOWLER) {
-    return res.status(400).json({ error: `You need at least ${MIN_BOWLER} bowlers (selected ${countBowl})` });
-  }
-  if (countKeep < MIN_KEEPER) {
-    return res.status(400).json({ error: `You need at least ${MIN_KEEPER} wicket-keeper (selected ${countKeep})` });
-  }
-  if (countAllRounder < MIN_ALL_ROUNDER) {
-    return res.status(400).json({ error: `You need at least ${MIN_ALL_ROUNDER} all-rounder (selected ${countAllRounder})` });
-  }
-
-  // 4b. Credit budget check - only enforced if this match has it enabled.
-  const { data: creditRules } = await supabase
-    .from('match_credit_rules')
-    .select('enabled, max_credits')
-    .eq('match_id', match_id)
-    .maybeSingle();
-
-  if (creditRules?.enabled) {
-    const totalCredits = pickedPlayers.reduce((sum, p) => sum + Number(p.credit_value), 0);
-    if (totalCredits > Number(creditRules.max_credits)) {
-      return res.status(400).json({
-        error: `Your team uses ${totalCredits.toFixed(1)} credits, which exceeds the ${Number(creditRules.max_credits).toFixed(1)} credit limit for this match`
-      });
-    }
-  }
-
-  // 5. Upsert user_teams row
+  // 3. Upsert user_teams row
   const { data: userTeam, error: utErr } = await supabase
     .from('user_teams')
     .upsert(
@@ -152,7 +47,7 @@ router.post('/', requireAuth, async (req, res) => {
 
   if (utErr) return res.status(500).json({ error: utErr.message });
 
-  // 6. Replace user_team_players
+  // 4. Replace user_team_players
   await supabase.from('user_team_players').delete().eq('user_team_id', userTeam.id);
 
   const specialMap = new Map(special_picks.map(p => [p.player_id, p.special_rank]));

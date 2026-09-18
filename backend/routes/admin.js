@@ -8,6 +8,7 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 import { calculateBasePoints, calculateTeamTotal } from '../utils/points.js';
 import { parseScorecardText, normalizeName } from '../utils/scorecardParser.js';
 import { suggestCredit, ROLE_BASE_CREDIT, MIN_CREDIT, MAX_CREDIT } from '../utils/creditSuggestion.js';
+import { validateTeam } from '../utils/teamValidation.js';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -639,6 +640,69 @@ router.get('/matches/:id/leaderboard', async (req, res) => {
     .order('total_points', { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
+});
+
+// GET /api/admin/matches/:id/teams/validation - validate every submitted team
+// for an upcoming match against the current rules (squad size, special picks,
+// player pool, role mix, credit budget). This is the admin's sanity-check on
+// the Leaderboard tab so rule violations can be flagged before the match
+// locks. Only meaningful for upcoming matches (points don't exist yet), so
+// locked/completed matches are rejected here.
+router.get('/matches/:id/teams/validation', async (req, res) => {
+  const { id } = req.params;
+
+  const { data: match, error: matchErr } = await supabase
+    .from('matches')
+    .select('id, squad_size, status, team_a_id, team_b_id')
+    .eq('id', id)
+    .single();
+  if (matchErr) return res.status(404).json({ error: 'Match not found' });
+  if (match.status !== 'upcoming') {
+    return res.status(400).json({ error: 'Team validation is only available for upcoming matches' });
+  }
+
+  const [specialRules, creditRules, playersRes, teamsRes] = await Promise.all([
+    supabase.from('match_special_rules').select('enabled, multipliers').eq('match_id', id).maybeSingle(),
+    supabase.from('match_credit_rules').select('enabled, max_credits').eq('match_id', id).maybeSingle(),
+    supabase
+      .from('players')
+      .select('id, name, real_team_id, credit_value, role')
+      .in('real_team_id', [match.team_a_id, match.team_b_id]),
+    supabase
+      .from('user_teams')
+      .select('user_id, total_points, user:user_id ( id, full_name ), user_team_players ( player_id, special_rank )')
+      .eq('match_id', id)
+  ]);
+
+  const playersById = new Map((playersRes.data || []).map(p => [p.id, p]));
+
+  const teams = [];
+  for (const t of teamsRes.data || []) {
+    const picks = t.user_team_players || [];
+    const playerIds = picks.map(p => p.player_id);
+    const specialPicks = picks.filter(p => p.special_rank).map(p => ({ player_id: p.player_id, special_rank: p.special_rank }));
+    const pickedPlayers = playerIds.map(pid => playersById.get(pid)).filter(Boolean);
+
+    const { valid, errors, totalCredits, creditLimit } = await validateTeam({
+      match,
+      playerIds,
+      specialPicks,
+      specialRules: specialRules.data || null,
+      creditRules: creditRules.data || null,
+      pickedPlayers
+    });
+
+    teams.push({
+      user_id: t.user_id,
+      full_name: t.user?.full_name || 'Unknown',
+      total_points: t.total_points,
+      player_count: playerIds.length,
+      players: pickedPlayers.map(p => ({ id: p.id, name: p.name, role: p.role, credit_value: Number(p.credit_value) })),
+      validation: { valid, errors, totalCredits, creditLimit }
+    });
+  }
+
+  res.json({ status: match.status, teams });
 });
 
 // Delete a completed match and all its related data (user teams, stats, etc.
