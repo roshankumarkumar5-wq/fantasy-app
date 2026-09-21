@@ -37,7 +37,6 @@
     const matchId = params.get('matchId');
     if (!matchId) {
       window.location.href = 'matches.html';
-      return;
     }
 
     async function loadMyTeam() {
@@ -234,9 +233,11 @@
       }
     });
 
-    loadMyTeam();
-    loadLeaderboard();
-    loadIdealTeamAvailability();
+    if (matchId) {
+      loadMyTeam();
+      loadLeaderboard();
+      loadIdealTeamAvailability();
+    }
   </script>
 </body>
 </html>
