@@ -119,6 +119,9 @@
     let lastLeaderboard = [];
     let currentMatchLabel = '';
     let generatedCsvContent = null;
+    let matchSquadSize = 7;
+    let matchSpecialRules = { enabled: false, multipliers: [] };
+    let adminEditLocked = true; // app_config.enable_admin_team_edit_after_lock
 
     // ---- Tab switching ----
     document.querySelectorAll('#detailTabs button').forEach(btn => {
@@ -149,6 +152,8 @@
         const m = data.match;
         matchPlayers = data.players || [];
         currentMatchLabel = `${m.team_a?.short_code || '?'}-vs-${m.team_b?.short_code || '?'}`;
+        matchSquadSize = m.squad_size;
+        matchSpecialRules = data.special_rules || { enabled: false, multipliers: [] };
 
         el.innerHTML = `
           <div class="card">
@@ -194,6 +199,14 @@
       }
     }
     loadMatchSummary();
+    loadAdminPermissions();
+
+    async function loadAdminPermissions() {
+      try {
+        const s = await Api.getAdminSettings();
+        adminEditLocked = s.enable_admin_team_edit_after_lock !== false;
+      } catch (_) { /* keep default (editing allowed) */ }
+    }
 
     document.getElementById('lockBtn').addEventListener('click', async () => {
       const msg = document.getElementById('lockMsg');
@@ -405,11 +418,13 @@
           return;
         }
         const validCount = teams.filter(t => t.validation.valid).length;
+        const showEdit = data.status === 'locked' && adminEditLocked;
         el.innerHTML = `
           <div style="margin:12px 0 8px;">
             <strong>Team Validation</strong>
             <span class="match-meta" style="margin-left:8px;">${validCount} of ${teams.length} teams valid</span>
           </div>
+          ${showEdit ? '<p class="match-meta">Match is locked - you can edit any user\'s team. The same selection rules apply.</p>' : ''}
           <table class="admin-table">
             <tr><th>#</th><th>User</th><th>Players</th><th>Credits</th><th>Status</th><th></th></tr>
             ${teams.map((t, i) => {
@@ -429,11 +444,12 @@
                   : '<span style="color:#dc2626; font-weight:600;">' + v.errors.length + ' issue(s)</span>'}
                 ${v.valid ? '' : v.errors.map(e => '<div style="color:#dc2626;">&bull; ' + e + '</div>').join('')}
                 </td>
-                <td>${v.valid
-                  ? ''
-                  : `<button class="btn" style="background:#dc2626; padding:4px 10px; font-size:12px; white-space:nowrap;" onclick="deleteInvalidTeam('${t.user_id}', '${safeName}')">Delete</button>`}
+                <td style="white-space:nowrap;">
+                  ${showEdit ? `<button class="btn secondary" style="padding:4px 10px; font-size:12px;" onclick="toggleTeamEditor('${t.user_id}')">Edit</button>` : ''}
+                  ${v.valid ? '' : `<button class="btn" style="background:#dc2626; padding:4px 10px; font-size:12px; margin-left:4px;" onclick="deleteInvalidTeam('${t.user_id}', '${safeName}')">Delete</button>`}
                 </td>
-              </tr>`;
+              </tr>
+              ${showEdit ? `<tr id="editRow-${t.user_id}" style="display:none;"><td colspan="6">${buildTeamEditor(t.user_id, t.players)}</td></tr>` : ''}`;
             }).join('')}
           </table>
         `;
@@ -449,6 +465,94 @@
         runTeamValidation();
       } catch (err) {
         alert('Could not delete team: ' + err.message);
+      }
+    }
+
+    function roleShort(r) {
+      return { batsman: 'BAT', bowler: 'BOWL', keeper: 'WK', 'all-rounder': 'AR' }[r] || r || '?';
+    }
+
+    function buildTeamEditor(userId, teamPlayers) {
+      const specialCount = matchSpecialRules.enabled ? (matchSpecialRules.multipliers || []).length : 0;
+      const specialByRank = {};
+      (teamPlayers || []).forEach(tp => {
+        if (tp.special_rank) specialByRank[tp.special_rank] = tp.id;
+      });
+
+      let html = `<div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:8px;">`;
+      for (let s = 0; s < matchSquadSize; s++) {
+        const prev = teamPlayers[s] ? teamPlayers[s].id : '';
+        html += `<label style="font-size:12px; display:flex; flex-direction:column; gap:4px;">Slot ${s + 1}
+          <select id="slotSel-${userId}-${s}" style="width:100%;" onchange="refreshSpecialOptions('${userId}')">
+            <option value="">Select player</option>
+            ${matchPlayers.map(p => `<option value="${p.id}" ${p.id === prev ? 'selected' : ''}>${p.name} — ${roleShort(p.role)} (${Number(p.credit_value).toFixed(1)} cr)</option>`).join('')}
+          </select></label>`;
+      }
+      html += `</div>`;
+
+      if (specialCount > 0) {
+        html += `<p class="match-meta" style="margin:10px 0 6px;">Special picks (auto-refreshed from the slots above):</p>`;
+        html += `<div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:8px;">`;
+        for (let k = 0; k < specialCount; k++) {
+          const prevId = specialByRank[k + 1];
+          html += `<label style="font-size:12px; display:flex; flex-direction:column; gap:4px;">Special rank ${k + 1} (×${Number(matchSpecialRules.multipliers[k]).toFixed(1)})
+            <select id="specialSel-${userId}-${k}" style="width:100%;">
+              <option value="">None</option>
+              ${(teamPlayers || []).map(tp => `<option value="${tp.id}" ${tp.id === prevId ? 'selected' : ''}>${tp.name}</option>`).join('')}
+            </select></label>`;
+        }
+        html += `</div>`;
+      }
+
+      html += `<div style="margin-top:12px;">
+        <button class="btn" onclick="saveTeamEdit('${userId}')">Save Team</button>
+        <button class="btn secondary" onclick="document.getElementById('editRow-${userId}').style.display='none'">Cancel</button>
+        <span id="editErr-${userId}"></span>
+      </div>`;
+      return html;
+    }
+
+    function toggleTeamEditor(userId) {
+      const row = document.getElementById(`editRow-${userId}`);
+      if (row) row.style.display = row.style.display === 'none' ? 'table-row' : 'none';
+    }
+
+    function refreshSpecialOptions(userId) {
+      const specialCount = matchSpecialRules.enabled ? (matchSpecialRules.multipliers || []).length : 0;
+      const chosen = [];
+      for (let s = 0; s < matchSquadSize; s++) {
+        const slot = document.getElementById(`slotSel-${userId}-${s}`);
+        if (slot && slot.value) chosen.push({ id: slot.value, label: slot.options[slot.selectedIndex].text });
+      }
+      for (let k = 0; k < specialCount; k++) {
+        const sel = document.getElementById(`specialSel-${userId}-${k}`);
+        if (!sel) continue;
+        const prev = sel.value;
+        sel.innerHTML = '<option value="">None</option>' + chosen
+          .map(p => `<option value="${p.id}" ${p.id === prev ? 'selected' : ''}>${p.label}</option>`)
+          .join('');
+      }
+    }
+
+    async function saveTeamEdit(userId) {
+      const errEl = document.getElementById(`editErr-${userId}`);
+      errEl.innerHTML = '';
+      const player_ids = [];
+      for (let s = 0; s < matchSquadSize; s++) {
+        const v = document.getElementById(`slotSel-${userId}-${s}`).value;
+        if (v) player_ids.push(v);
+      }
+      const specialCount = matchSpecialRules.enabled ? (matchSpecialRules.multipliers || []).length : 0;
+      const special_picks = [];
+      for (let k = 0; k < specialCount; k++) {
+        const v = document.getElementById(`specialSel-${userId}-${k}`).value;
+        if (v) special_picks.push({ player_id: v, special_rank: k + 1 });
+      }
+      try {
+        await Api.editMatchTeam(matchId, userId, { player_ids, special_picks });
+        runTeamValidation();
+      } catch (err) {
+        errEl.innerHTML = `<span class="error-msg">${err.message}</span>`;
       }
     }
 

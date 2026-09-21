@@ -753,6 +753,104 @@ router.delete('/matches/:id/teams/:userId', async (req, res) => {
   res.json({ success: true, deleted_user: team.user?.full_name || team.user?.email || 'Unknown' });
 });
 
+// PUT /api/admin/matches/:id/teams/:userId - admin replaces a user's squad
+// (adds it for them if they haven't submitted). Allowed for upcoming matches,
+// and for locked matches only while app_config.enable_admin_team_edit_after_lock
+// is on. Reuses the exact same squad rules as user submission via the shared
+// validator, so the replacement is guaranteed to be legal.
+router.put('/matches/:id/teams/:userId', async (req, res) => {
+  const { id, userId } = req.params;
+  const { player_ids, special_picks = [] } = req.body;
+
+  if (!Array.isArray(player_ids)) {
+    return res.status(400).json({ error: 'player_ids must be an array' });
+  }
+
+  const { data: match, error: matchErr } = await supabase
+    .from('matches')
+    .select('id, squad_size, status, team_a_id, team_b_id, team_a:real_teams!team_a_id(short_code), team_b:real_teams!team_b_id(short_code)')
+    .eq('id', id)
+    .single();
+  if (matchErr || !match) return res.status(404).json({ error: 'Match not found' });
+  if (match.status !== 'upcoming' && match.status !== 'locked') {
+    return res.status(400).json({ error: 'Teams can only be edited while the match is upcoming or locked' });
+  }
+
+  if (match.status === 'locked') {
+    const { data: config } = await supabase
+      .from('app_config')
+      .select('enable_admin_team_edit_after_lock')
+      .maybeSingle();
+    if (config?.enable_admin_team_edit_after_lock === false) {
+      return res.status(403).json({ error: 'Editing teams after lock is disabled. Enable it in admin Settings.' });
+    }
+  }
+
+  // A player can hold at most one special rank (user_team_players enforces
+  // (user_team_id, player_id) uniqueness - catch it here with a clear message).
+  const specialIds = new Set(special_picks.map(p => p.player_id));
+  if (specialIds.size !== special_picks.length) {
+    return res.status(400).json({ error: 'A player can only hold one special rank' });
+  }
+
+  const { valid, errors } = await validateTeam({ match, playerIds: player_ids, specialPicks: special_picks });
+  if (!valid) return res.status(400).json({ error: errors[0] });
+
+  const { data: targetUser } = await supabase
+    .from('users')
+    .select('full_name, email')
+    .eq('id', userId)
+    .maybeSingle();
+
+  // Get or create the user_teams row.
+  const { data: userTeam } = await supabase
+    .from('user_teams')
+    .select('id')
+    .eq('match_id', id)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  let teamId;
+  if (userTeam) {
+    teamId = userTeam.id;
+    await supabase.from('user_teams').update({ submitted_at: new Date().toISOString() }).eq('id', teamId);
+  } else {
+    const { data: created, error: utErr } = await supabase
+      .from('user_teams')
+      .insert({ user_id: userId, match_id: id, submitted_at: new Date().toISOString() })
+      .select('id')
+      .single();
+    if (utErr) return res.status(500).json({ error: utErr.message });
+    teamId = created.id;
+  }
+
+  // Replace the picks.
+  await supabase.from('user_team_players').delete().eq('user_team_id', teamId);
+
+  const specialMap = new Map(special_picks.map(p => [p.player_id, p.special_rank]));
+  const rows = player_ids.map(pid => ({
+    user_team_id: teamId,
+    player_id: pid,
+    special_rank: specialMap.get(pid) || null
+  }));
+
+  const { error: insertErr } = await supabase.from('user_team_players').insert(rows);
+  if (insertErr) return res.status(500).json({ error: insertErr.message });
+
+  const teamA = match.team_a?.short_code || '?';
+  const teamB = match.team_b?.short_code || '?';
+  try {
+    await supabase.from('audit_logs').insert({
+      user_id: userId,
+      user_name: targetUser?.full_name || targetUser?.email || 'Unknown',
+      action: 'admin_edit_team',
+      details: `Edited team for ${teamA} vs ${teamB} (${match.status} state)`
+    });
+  } catch (_) {}
+
+  res.json({ success: true, user_team_id: teamId });
+});
+
 // GET /api/admin/matches/:id/ideal-team - compute the ideal (highest-scoring)
 // fantasy squad for a completed match, purely for the admin. Uses each
 // player's actual final base_points and the match's own rules - squad size,
@@ -884,21 +982,22 @@ router.delete('/users/:id', async (req, res) => {
 router.get('/settings', async (req, res) => {
   const { data, error } = await supabase
     .from('app_config')
-    .select('enable_player_leaderboard, enable_team_views_after_lock, enable_ideal_team_visibility')
+    .select('enable_player_leaderboard, enable_team_views_after_lock, enable_ideal_team_visibility, enable_admin_team_edit_after_lock')
     .maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data || { enable_player_leaderboard: true, enable_team_views_after_lock: true, enable_ideal_team_visibility: false });
+  res.json(data || { enable_player_leaderboard: true, enable_team_views_after_lock: true, enable_ideal_team_visibility: false, enable_admin_team_edit_after_lock: true });
 });
 
 // PUT /api/admin/settings - update app configuration (single config row).
 // Accepts any or all boolean flags; at least one is required.
 router.put('/settings', async (req, res) => {
-  const { enable_player_leaderboard, enable_team_views_after_lock, enable_ideal_team_visibility } = req.body;
+  const { enable_player_leaderboard, enable_team_views_after_lock, enable_ideal_team_visibility, enable_admin_team_edit_after_lock } = req.body;
 
   const updates = {};
   if (typeof enable_player_leaderboard === 'boolean') updates.enable_player_leaderboard = enable_player_leaderboard;
   if (typeof enable_team_views_after_lock === 'boolean') updates.enable_team_views_after_lock = enable_team_views_after_lock;
   if (typeof enable_ideal_team_visibility === 'boolean') updates.enable_ideal_team_visibility = enable_ideal_team_visibility;
+  if (typeof enable_admin_team_edit_after_lock === 'boolean') updates.enable_admin_team_edit_after_lock = enable_admin_team_edit_after_lock;
 
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: 'Provide at least one boolean setting to update.' });
@@ -958,7 +1057,7 @@ const BACKUP_DELETE_ORDER = [...BACKUP_TABLES].reverse();
 // If a config table comes back empty after restore, fall back to these
 // defaults (mirrors the seed rows in database/schema.sql).
 const CONFIG_TABLE_DEFAULTS = {
-  app_config: () => [{ id: 1, enable_player_leaderboard: true, enable_team_views_after_lock: true, enable_ideal_team_visibility: false }],
+  app_config: () => [{ id: 1, enable_player_leaderboard: true, enable_team_views_after_lock: true, enable_ideal_team_visibility: false, enable_admin_team_edit_after_lock: true }],
   scoring_rules: () => [{
     id: 1,
     points_per_run: 1,

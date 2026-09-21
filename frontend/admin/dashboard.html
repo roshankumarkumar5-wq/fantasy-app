@@ -269,7 +269,7 @@
       document.getElementById('matchStatusTabs').style.display = 'none';
       document.getElementById('createMatchCard').style.display = 'none';
 
-      let settings = { enable_player_leaderboard: true, enable_team_views_after_lock: true, enable_ideal_team_visibility: false };
+      let settings = { enable_player_leaderboard: true, enable_team_views_after_lock: true, enable_ideal_team_visibility: false, enable_admin_team_edit_after_lock: true };
       let teams = [];
       let players = [];
       try {
@@ -303,6 +303,11 @@
             Users can see the "Ideal Team" for completed matches
           </label>
           <p class="match-meta" style="margin:6px 0 0; padding-left:24px;">The Ideal Team is the highest-scoring squad that could have been picked, computed from each player's final performance and this match's rules (composition, credits, special picks). Off by default; you always see it in the match detail page regardless.</p>
+          <label style="display:flex; align-items:center; gap:10px; margin:18px 0 6px; font-weight:600; color:var(--text); cursor:pointer;">
+            <input type="checkbox" id="enableAdminEditTeams" style="width:auto;" ${settings.enable_admin_team_edit_after_lock !== false ? 'checked' : ''}>
+            Allow admin to edit users' teams after the match is locked
+          </label>
+          <p class="match-meta" style="margin:6px 0 0; padding-left:24px;">When on, the match detail page's Validate Teams tool shows an Edit option for locked matches so you can fix a user's squad for them. Users never get this ability - it is admin-only. On by default.</p>
           <button class="btn" id="saveSettingsBtn">Save Settings</button>
           <div id="settingsMsg"></div>
         </div>
@@ -343,17 +348,20 @@
         const lbEnabled = document.getElementById('enablePlayerLb').checked;
         const teamViewsEnabled = document.getElementById('enableTeamViews').checked;
         const idealTeamEnabled = document.getElementById('enableIdealTeam').checked;
+        const adminEditTeamsEnabled = document.getElementById('enableAdminEditTeams').checked;
         const msg = document.getElementById('settingsMsg');
         try {
           await Api.updateAdminSettings({
             enable_player_leaderboard: lbEnabled,
             enable_team_views_after_lock: teamViewsEnabled,
-            enable_ideal_team_visibility: idealTeamEnabled
+            enable_ideal_team_visibility: idealTeamEnabled,
+            enable_admin_team_edit_after_lock: adminEditTeamsEnabled
           });
           msg.innerHTML = '<p class="success-msg">Settings saved. Users ' +
             (lbEnabled ? 'now see' : 'no longer see') + ' the Players tab, ' +
-            (teamViewsEnabled ? 'can' : 'cannot') + ' view each other\'s teams after a match is locked, and ' +
-            (idealTeamEnabled ? 'can' : 'cannot') + ' see the Ideal Team for completed matches.</p>';
+            (teamViewsEnabled ? 'can' : 'cannot') + ' view each other\'s teams after a match is locked, ' +
+            (idealTeamEnabled ? 'can' : 'cannot') + ' see the Ideal Team for completed matches, and ' +
+            (adminEditTeamsEnabled ? 'admins can edit' : 'the admin cannot edit') + ' teams after a match is locked.</p>';
         } catch (err) {
           msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
         }

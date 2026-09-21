@@ -98,6 +98,7 @@ const Api = {
   getLeaderboard: (matchId) => apiRequest(`/admin/matches/${matchId}/leaderboard`),
   getMatchTeamValidations: (matchId) => apiRequest(`/admin/matches/${matchId}/teams/validation`),
   deleteMatchTeam: (matchId, userId) => apiRequest(`/admin/matches/${matchId}/teams/${userId}`, { method: 'DELETE' }),
+  editMatchTeam: (matchId, userId, payload) => apiRequest(`/admin/matches/${matchId}/teams/${userId}`, { method: 'PUT', body: payload }),
   getAdminIdealTeam: (matchId) => apiRequest(`/admin/matches/${matchId}/ideal-team`),
   deleteMatch: (matchId) => apiRequest(`/admin/matches/${matchId}`, { method: 'DELETE' }),
 

@@ -163,16 +163,19 @@ insert into scoring_rules (id) values (1);
 -- enable_ideal_team_visibility: whether users may view the "Ideal
 -- Team" (highest-scoring possible squad) for completed matches; the
 -- admin always sees it regardless.
+-- enable_admin_team_edit_after_lock: whether the admin may edit a
+-- user's team after the match is locked (users themselves never can).
 -- ------------------------------------------------------------
 create table app_config (
   id int primary key default 1,
   enable_player_leaderboard boolean not null default true,
   enable_team_views_after_lock boolean not null default true,
   enable_ideal_team_visibility boolean not null default false,
+  enable_admin_team_edit_after_lock boolean not null default true,
   check (id = 1)   -- enforce single row
 );
 
-insert into app_config (id, enable_player_leaderboard, enable_team_views_after_lock, enable_ideal_team_visibility) values (1, true, true, false);
+insert into app_config (id, enable_player_leaderboard, enable_team_views_after_lock, enable_ideal_team_visibility, enable_admin_team_edit_after_lock) values (1, true, true, false, true);
 
 -- ------------------------------------------------------------
 -- Indexes for common lookups
