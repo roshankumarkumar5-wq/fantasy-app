@@ -24,6 +24,7 @@
       <button data-tab="stats">Stats</button>
       <button data-tab="finalize">Finalize</button>
       <button data-tab="leaderboard">Leaderboard</button>
+      <button data-tab="ideal">Ideal Team</button>
       <button data-tab="danger">Danger Zone</button>
     </div>
 
@@ -84,6 +85,15 @@
         <button class="btn secondary" id="downloadLeaderboardBtn" style="display:none;">Download CSV</button>
         <div id="teamValidation"></div>
         <div id="leaderboard"></div>
+      </div>
+    </div>
+
+    <div id="tabIdeal" class="tab-panel">
+      <div class="card">
+        <h3>Ideal Team Combination</h3>
+        <p class="match-meta">The highest-scoring fantasy squad that could have been picked for this match, based on the players' actual final performances and this match's own rules (composition, credit budget, special picks). For the admin's reference only.</p>
+        <button class="btn" id="loadIdealTeamBtn" style="display:none;">Compute Ideal Team</button>
+        <div id="idealTeam"></div>
       </div>
     </div>
 
@@ -164,6 +174,13 @@
         const showValidate = m.status === 'upcoming' || m.status === 'locked';
         document.getElementById('validateTeamsBtn').style.display = showValidate ? 'inline-block' : 'none';
         if (!showValidate) document.getElementById('teamValidation').innerHTML = '';
+
+        // "Ideal Team" only makes sense after final points exist.
+        const showIdeal = m.status === 'completed';
+        document.getElementById('loadIdealTeamBtn').style.display = showIdeal ? 'inline-block' : 'none';
+        document.getElementById('idealTeam').innerHTML = showIdeal
+          ? ''
+          : '<p class="match-meta">The ideal team becomes available once this match is completed and final stats are confirmed.</p>';
 
         const scoresheetEl = document.getElementById('currentScoresheet');
         scoresheetEl.innerHTML = m.scoresheet_url
@@ -434,6 +451,58 @@
         alert('Could not delete team: ' + err.message);
       }
     }
+
+    document.getElementById('loadIdealTeamBtn').addEventListener('click', async () => {
+      const el = document.getElementById('idealTeam');
+      el.innerHTML = '<p class="match-meta">Computing ideal team...</p>';
+      try {
+        const data = await Api.getAdminIdealTeam(matchId);
+        if (!data.ideal_team) {
+          el.innerHTML = `<p class="match-meta">${data.message || 'No valid squad found.'}</p>`;
+          return;
+        }
+        const roleMap = { batsman: 'BAT', bowler: 'BOWL', keeper: 'WK', 'all-rounder': 'AR' };
+        const c = data.counts;
+        const creditText = data.credit_limit == null
+          ? `${Number(data.credits_total || 0).toFixed(1)} (no limit)`
+          : `${Number(data.credits_total || 0).toFixed(1)} / ${Number(data.credit_limit).toFixed(1)}`;
+        const specialUsed = (data.multipliers || []).length > 0;
+        const teamAFlag = data.team_a_name ? data.team_a_name : 'Team A';
+        const teamBFlag = data.team_b_name ? data.team_b_name : 'Team B';
+
+        el.innerHTML = `
+          <div style="margin:12px 0; font-size:14px; line-height:1.8;">
+            <p><strong>${data.match_label}</strong>&nbsp;&nbsp;<span class="match-meta">Ideal squad (${data.squad_size} players)</span></p>
+            <p class="match-meta">Composition: ${c.teamA} from ${teamAFlag}, ${c.teamB} from ${teamBFlag} &middot;
+              ${c.batsman} BAT &middot; ${c.bowler} BOWL &middot; ${c.keeper} WK &middot; ${c['all-rounder']} AR</p>
+            <p class="match-meta">Total credits: ${creditText}</p>
+            <p><strong>Base total: ${Number(data.base_total).toFixed(1)} pts</strong>
+            ${specialUsed ? ` &middot; Projected total with special picks: <strong>${Number(data.projected_total).toFixed(1)} pts</strong>` : ''}</p>
+          </div>
+          <table class="admin-table">
+            <tr><th>#</th><th>Player</th><th>Role</th><th>Team</th><th>Credits</th><th>Points</th><th>Special</th></tr>
+            ${data.ideal_team.map((p, i) => {
+              const teamFlag = p.real_team_id === data.team_a_id ? teamAFlag : teamBFlag;
+              const specialChip = p.special_rank
+                ? ` <span class="special-chip">S${p.special_rank} (${Number(data.multipliers[p.special_rank - 1]).toFixed(1)}x)</span>`
+                : '';
+              return `<tr>
+                <td>${i + 1}</td>
+                <td>${p.name}${specialChip}</td>
+                <td>${roleMap[p.role] || p.role || ''}</td>
+                <td>${teamFlag}</td>
+                <td>${Number(p.credit_value).toFixed(1)}</td>
+                <td>${Number(p.base_points).toFixed(1)}</td>
+                <td>${p.special_rank ? p.base_points * Number(data.multipliers[p.special_rank - 1]) : ''}</td>
+              </tr>`;
+            }).join('')}
+          </table>
+          ${specialUsed ? `<p class="match-meta" style="margin-top:8px;">Special column shows each special-pick player's boosted points (${data.multipliers.join(', ')}x multipliers).</p>` : ''}
+        `;
+      } catch (err) {
+        el.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    });
 
     document.getElementById('downloadLeaderboardBtn').addEventListener('click', async () => {
       if (lastLeaderboard.length === 0) {

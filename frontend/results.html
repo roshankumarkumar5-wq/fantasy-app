@@ -16,6 +16,12 @@
   </div>
   <div class="container">
     <div class="card" id="myTeamCard"><p>Loading your team...</p></div>
+    <div class="card" id="idealTeamCard" style="display:none;">
+      <h3>Ideal Team</h3>
+      <p class="match-meta">The highest-scoring squad that could have been picked for this match, based on the players' final performances and this match's rules.</p>
+      <button class="btn" id="loadIdealTeamBtn">Load Ideal Team</button>
+      <div id="idealTeamContent"></div>
+    </div>
     <div class="card">
       <h3>Leaderboard</h3>
       <div id="leaderboard"><p>Loading...</p></div>
@@ -178,8 +184,58 @@
       }
     }
 
+    async function loadIdealTeamAvailability() {
+      try {
+        const s = await Api.getSettings();
+        if (s.enable_ideal_team_visibility) {
+          document.getElementById('idealTeamCard').style.display = 'block';
+        }
+      } catch (_) { /* feature hidden if settings unavailable */ }
+    }
+
+    document.getElementById('loadIdealTeamBtn').addEventListener('click', async () => {
+      const el = document.getElementById('idealTeamContent');
+      el.innerHTML = '<p class="match-meta">Loading ideal team...</p>';
+      try {
+        const data = await Api.getIdealTeam(matchId);
+        if (!data.ideal_team) {
+          el.innerHTML = `<p class="match-meta">${data.message || 'No valid squad found.'}</p>`;
+          return;
+        }
+        const roleMap = { batsman: 'BAT', bowler: 'BOWL', keeper: 'WK', 'all-rounder': 'AR' };
+        const c = data.counts;
+        const specialUsed = (data.multipliers || []).length > 0;
+        el.innerHTML = `
+          <div style="margin:12px 0; font-size:14px; line-height:1.8;">
+            <p class="match-meta">Composition: ${c.teamA} from ${data.team_a_name || 'Team A'}, ${c.teamB} from ${data.team_b_name || 'Team B'} &middot;
+              ${c.batsman} BAT &middot; ${c.bowler} BOWL &middot; ${c.keeper} WK &middot; ${c['all-rounder']} AR</p>
+            <p class="match-meta">Total credits: ${data.credit_limit == null
+              ? `${Number(data.credits_total || 0).toFixed(1)} (no limit)`
+              : `${Number(data.credits_total || 0).toFixed(1)} / ${Number(data.credit_limit).toFixed(1)}`}</p>
+            <p><strong>Base total: ${Number(data.base_total).toFixed(1)} pts</strong>
+            ${specialUsed ? ` &middot; Projected total with special picks: <strong>${Number(data.projected_total).toFixed(1)} pts</strong>` : ''}</p>
+          </div>
+          <table class="admin-table">
+            <tr><th>#</th><th>Player</th><th>Role</th><th>Credits</th><th>Points</th></tr>
+            ${data.ideal_team.map((p, i) => `
+              <tr>
+                <td>${i + 1}</td>
+                <td>${p.name} ${p.special_rank ? `<span class="special-chip">S${p.special_rank} (${Number(data.multipliers[p.special_rank - 1]).toFixed(1)}x)</span>` : ''}</td>
+                <td>${roleMap[p.role] || p.role || ''}</td>
+                <td>${Number(p.credit_value).toFixed(1)}</td>
+                <td>${Number(p.base_points).toFixed(1)}</td>
+              </tr>
+            `).join('')}
+          </table>
+        `;
+      } catch (err) {
+        el.innerHTML = `<p class="error-msg">${err.message}</p>`;
+      }
+    });
+
     loadMyTeam();
     loadLeaderboard();
+    loadIdealTeamAvailability();
   </script>
 </body>
 </html>

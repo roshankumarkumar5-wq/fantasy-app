@@ -9,6 +9,7 @@ import { calculateBasePoints, calculateTeamTotal } from '../utils/points.js';
 import { parseScorecardText, normalizeName } from '../utils/scorecardParser.js';
 import { suggestCredit, ROLE_BASE_CREDIT, MIN_CREDIT, MAX_CREDIT } from '../utils/creditSuggestion.js';
 import { validateTeam } from '../utils/teamValidation.js';
+import { getIdealTeamForMatch } from '../utils/idealTeam.js';
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -752,6 +753,19 @@ router.delete('/matches/:id/teams/:userId', async (req, res) => {
   res.json({ success: true, deleted_user: team.user?.full_name || team.user?.email || 'Unknown' });
 });
 
+// GET /api/admin/matches/:id/ideal-team - compute the ideal (highest-scoring)
+// fantasy squad for a completed match, purely for the admin. Uses each
+// player's actual final base_points and the match's own rules - squad size,
+// per-team/role minimums, credit budget and special-player multipliers - to
+// find the best legal lineup and show what total it would have scored.
+// (The user-facing variant lives on /api/matches/:id/ideal-team and is gated
+// by app_config.enable_ideal_team_visibility.)
+router.get('/matches/:id/ideal-team', async (req, res) => {
+  const result = await getIdealTeamForMatch(req.params.id);
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  res.json(result.payload);
+});
+
 // Delete a completed match and all its related data (user teams, stats, etc.
 // all cascade automatically via foreign keys). Restricted to completed
 // matches only, as a safety guard against accidentally wiping an active one.
@@ -870,20 +884,21 @@ router.delete('/users/:id', async (req, res) => {
 router.get('/settings', async (req, res) => {
   const { data, error } = await supabase
     .from('app_config')
-    .select('enable_player_leaderboard, enable_team_views_after_lock')
+    .select('enable_player_leaderboard, enable_team_views_after_lock, enable_ideal_team_visibility')
     .maybeSingle();
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data || { enable_player_leaderboard: true, enable_team_views_after_lock: true });
+  res.json(data || { enable_player_leaderboard: true, enable_team_views_after_lock: true, enable_ideal_team_visibility: false });
 });
 
 // PUT /api/admin/settings - update app configuration (single config row).
-// Accepts either or both boolean flags; at least one is required.
+// Accepts any or all boolean flags; at least one is required.
 router.put('/settings', async (req, res) => {
-  const { enable_player_leaderboard, enable_team_views_after_lock } = req.body;
+  const { enable_player_leaderboard, enable_team_views_after_lock, enable_ideal_team_visibility } = req.body;
 
   const updates = {};
   if (typeof enable_player_leaderboard === 'boolean') updates.enable_player_leaderboard = enable_player_leaderboard;
   if (typeof enable_team_views_after_lock === 'boolean') updates.enable_team_views_after_lock = enable_team_views_after_lock;
+  if (typeof enable_ideal_team_visibility === 'boolean') updates.enable_ideal_team_visibility = enable_ideal_team_visibility;
 
   if (Object.keys(updates).length === 0) {
     return res.status(400).json({ error: 'Provide at least one boolean setting to update.' });
@@ -943,7 +958,7 @@ const BACKUP_DELETE_ORDER = [...BACKUP_TABLES].reverse();
 // If a config table comes back empty after restore, fall back to these
 // defaults (mirrors the seed rows in database/schema.sql).
 const CONFIG_TABLE_DEFAULTS = {
-  app_config: () => [{ id: 1, enable_player_leaderboard: true, enable_team_views_after_lock: true }],
+  app_config: () => [{ id: 1, enable_player_leaderboard: true, enable_team_views_after_lock: true, enable_ideal_team_visibility: false }],
   scoring_rules: () => [{
     id: 1,
     points_per_run: 1,

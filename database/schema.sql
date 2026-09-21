@@ -160,15 +160,19 @@ insert into scoring_rules (id) values (1);
 -- across all completed matches.
 -- enable_team_views_after_lock: whether users may view OTHER users'
 -- fantasy teams once a match is locked (before results are in).
+-- enable_ideal_team_visibility: whether users may view the "Ideal
+-- Team" (highest-scoring possible squad) for completed matches; the
+-- admin always sees it regardless.
 -- ------------------------------------------------------------
 create table app_config (
   id int primary key default 1,
   enable_player_leaderboard boolean not null default true,
   enable_team_views_after_lock boolean not null default true,
+  enable_ideal_team_visibility boolean not null default false,
   check (id = 1)   -- enforce single row
 );
 
-insert into app_config (id, enable_player_leaderboard, enable_team_views_after_lock) values (1, true, true);
+insert into app_config (id, enable_player_leaderboard, enable_team_views_after_lock, enable_ideal_team_visibility) values (1, true, true, false);
 
 -- ------------------------------------------------------------
 -- Indexes for common lookups

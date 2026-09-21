@@ -66,6 +66,7 @@ const Api = {
   getUserTeam: (matchId, userId) => apiRequest(`/fantasy-teams/${matchId}?userId=${userId}`),
   getPublicLeaderboard: (matchId) => apiRequest(`/matches/${matchId}/leaderboard`),
   getSubmitters: (matchId) => apiRequest(`/matches/${matchId}/submitters`),
+  getIdealTeam: (matchId) => apiRequest(`/matches/${matchId}/ideal-team`),
   getOverallLeaderboard: () => apiRequest('/leaderboard/overall'),
   getPlayerLeaderboard: (sortBy, matchId) => {
     const params = new URLSearchParams();
@@ -97,6 +98,7 @@ const Api = {
   getLeaderboard: (matchId) => apiRequest(`/admin/matches/${matchId}/leaderboard`),
   getMatchTeamValidations: (matchId) => apiRequest(`/admin/matches/${matchId}/teams/validation`),
   deleteMatchTeam: (matchId, userId) => apiRequest(`/admin/matches/${matchId}/teams/${userId}`, { method: 'DELETE' }),
+  getAdminIdealTeam: (matchId) => apiRequest(`/admin/matches/${matchId}/ideal-team`),
   deleteMatch: (matchId) => apiRequest(`/admin/matches/${matchId}`, { method: 'DELETE' }),
 
   // User approvals

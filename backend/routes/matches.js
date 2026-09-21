@@ -1,6 +1,7 @@
 import express from 'express';
 import { supabase } from '../db/supabase.js';
 import { requireAuth } from '../middleware/auth.js';
+import { getIdealTeamForMatch } from '../utils/idealTeam.js';
 
 const router = express.Router();
 
@@ -169,6 +170,26 @@ router.get('/:id/leaderboard', requireAuth, async (req, res) => {
   }));
 
   res.json(ranked);
+});
+
+// GET /api/matches/:id/ideal-team - user-facing "Ideal Team" for a completed
+// match. Only available when the admin has enabled
+// app_config.enable_ideal_team_visibility; admins always have this via
+// /api/admin/matches/:id/ideal-team (same computation, shared helper).
+router.get('/:id/ideal-team', requireAuth, async (req, res) => {
+  const { id } = req.params;
+
+  const { data: config } = await supabase
+    .from('app_config')
+    .select('enable_ideal_team_visibility')
+    .maybeSingle();
+  if (config?.enable_ideal_team_visibility !== true) {
+    return res.status(403).json({ error: 'Ideal team is not enabled for this league' });
+  }
+
+  const result = await getIdealTeamForMatch(id);
+  if (!result.ok) return res.status(result.status).json({ error: result.error });
+  res.json(result.payload);
 });
 
 export default router;

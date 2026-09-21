@@ -269,7 +269,7 @@
       document.getElementById('matchStatusTabs').style.display = 'none';
       document.getElementById('createMatchCard').style.display = 'none';
 
-      let settings = { enable_player_leaderboard: true, enable_team_views_after_lock: true };
+      let settings = { enable_player_leaderboard: true, enable_team_views_after_lock: true, enable_ideal_team_visibility: false };
       let teams = [];
       let players = [];
       try {
@@ -298,6 +298,11 @@
             Users can view other users' teams after a match is locked
           </label>
           <p class="match-meta" style="margin:6px 0 0; padding-left:24px;">Off means users only see each other's teams after a match is completed (final stats published). On means they can also compare teams as soon as the match is locked, before results are in.</p>
+          <label style="display:flex; align-items:center; gap:10px; margin:18px 0 6px; font-weight:600; color:var(--text); cursor:pointer;">
+            <input type="checkbox" id="enableIdealTeam" style="width:auto;" ${settings.enable_ideal_team_visibility !== false ? 'checked' : ''}>
+            Users can see the "Ideal Team" for completed matches
+          </label>
+          <p class="match-meta" style="margin:6px 0 0; padding-left:24px;">The Ideal Team is the highest-scoring squad that could have been picked, computed from each player's final performance and this match's rules (composition, credits, special picks). Off by default; you always see it in the match detail page regardless.</p>
           <button class="btn" id="saveSettingsBtn">Save Settings</button>
           <div id="settingsMsg"></div>
         </div>
@@ -337,15 +342,18 @@
       document.getElementById('saveSettingsBtn').addEventListener('click', async () => {
         const lbEnabled = document.getElementById('enablePlayerLb').checked;
         const teamViewsEnabled = document.getElementById('enableTeamViews').checked;
+        const idealTeamEnabled = document.getElementById('enableIdealTeam').checked;
         const msg = document.getElementById('settingsMsg');
         try {
           await Api.updateAdminSettings({
             enable_player_leaderboard: lbEnabled,
-            enable_team_views_after_lock: teamViewsEnabled
+            enable_team_views_after_lock: teamViewsEnabled,
+            enable_ideal_team_visibility: idealTeamEnabled
           });
           msg.innerHTML = '<p class="success-msg">Settings saved. Users ' +
-            (lbEnabled ? 'now see' : 'no longer see') + ' the Players tab, and ' +
-            (teamViewsEnabled ? 'can' : 'cannot') + ' view each other\'s teams after a match is locked.</p>';
+            (lbEnabled ? 'now see' : 'no longer see') + ' the Players tab, ' +
+            (teamViewsEnabled ? 'can' : 'cannot') + ' view each other\'s teams after a match is locked, and ' +
+            (idealTeamEnabled ? 'can' : 'cannot') + ' see the Ideal Team for completed matches.</p>';
         } catch (err) {
           msg.innerHTML = `<p class="error-msg">${err.message}</p>`;
         }
