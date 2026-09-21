@@ -29,17 +29,30 @@ const Auth = {
   }
 };
 
-async function apiRequest(path, { method = 'GET', body = null, isFormData = false } = {}) {
+async function apiRequest(path, { method = 'GET', body = null, isFormData = false, timeoutMs = 45000 } = {}) {
   const headers = {};
   const token = Auth.getToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
   if (!isFormData) headers['Content-Type'] = 'application/json';
 
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers,
-    body: body ? (isFormData ? body : JSON.stringify(body)) : null
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      method,
+      headers,
+      body: body ? (isFormData ? body : JSON.stringify(body)) : null,
+      signal: controller.signal
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      throw new Error(`Request timed out after ${timeoutMs / 1000}s - check the backend is online`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 
   const data = await res.json().catch(() => ({}));
 
